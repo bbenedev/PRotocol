@@ -1,6 +1,14 @@
 # PRotocol
 
-**Status: design phase. No code yet.**
+**Status: milestone 1 of 6 done.** The evaluator (the rules that turn branch requirements
+and evidence into a verdict) is written and tested. It does not talk to GitHub yet.
+
+```bash
+npm install
+npm run check      # type check + 51 tests, no network needed
+```
+
+Requires Node.js 22.18 or newer.
 
 PRotocol is a planned read-only GitHub App that explains, in one check on every pull
 request, whether it can be merged, what is missing, why a green check may not count

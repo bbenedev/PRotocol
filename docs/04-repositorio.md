@@ -7,9 +7,11 @@ producto, un proceso y una persona manteniéndolo.
 PRotocol/
   src/
     evaluator/        Puro: requisitos + evidencia -> veredicto. Sin red.
-      verdict.ts
-      freshness.ts
-      explain.ts      Textos para personas, en inglés
+      types.ts        El contrato con la capa de GitHub
+      checks.ts       Checks requeridos y frescura
+      reviews.ts      Aprobaciones, cambios pedidos, CODEOWNERS, último push
+      evaluate.ts     El veredicto
+      explain.ts      El resumen del check, con el texto no confiable escapado
     github/           Único lugar que habla con GitHub
       app.ts          Autenticación de la App
       requirements.ts Reglas efectivas de la rama base
@@ -52,7 +54,7 @@ Reglas de dependencia (las verifica una prueba que lee los `import`):
 | Uso | Herramienta |
 |---|---|
 | Tipos | TypeScript en modo estricto |
-| Pruebas | Vitest |
+| Pruebas | El sistema de pruebas de Node (`node --test`), que en Node 22.18+ corre TypeScript sin compilar. Vitest se descartó el 21/10/2026: las versiones 3.x y 4.x hasta la 4.1.10 tenían avisos de seguridad abiertos y npm no pudo resolver la 4.1.11 |
 | Lint y formato | ESLint + Prettier |
 | Esquemas | Zod |
 | SQLite | `better-sqlite3` (**Por verificar** compatibilidad con la versión LTS de Node elegida; alternativa: el módulo `node:sqlite`) |

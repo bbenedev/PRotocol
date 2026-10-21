@@ -92,8 +92,19 @@ Se evalúa en este orden y gana el primer caso que aplique:
 4. PR en borrador o con conflictos → `blocked`.
 5. Algún requisito `missing` o `pending` → `pending`.
 6. Algún check con frescura `old-head` → `pending` (hace falta el check del commit actual).
-7. Todo `met`, con frescura `current` o `base-unknown` → `ready`, y si hubo `base-unknown` se
-   dice en la explicación.
+7. Un check con frescura `old-base` → `pending` solo si la regla exige la rama al día
+   (`strict`); si no, cuenta como cumplido, igual que en GitHub, y la explicación lo dice.
+8. Todo `met`, con frescura `current`, `old-base` (sin `strict`) o `base-unknown` → `ready`, y
+   si hubo `base-unknown` se dice en las notas.
+
+Otras reglas que sigue el evaluador (implementadas en el hito 1):
+
+- Solo cuenta la última revisión de cada persona; los comentarios no cuentan; la del autor
+  nunca cuenta.
+- Una aprobación sin acceso de escritura confirmado no cuenta. Un pedido de cambios con
+  acceso desconocido sí bloquea: lo desconocido nunca ayuda a llegar a `ready`.
+- Un pedido de cambios solo bloquea si la rama exige revisiones, como en GitHub.
+- `neutral` y `skipped` cuentan como aprobados, como en GitHub.
 
 Reglas fijas:
 
