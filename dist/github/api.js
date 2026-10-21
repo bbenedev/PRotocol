@@ -43,7 +43,7 @@ export function createClient(token, fetcher = fetch, sleep = (ms) => new Promise
         if (res.headers.get("x-ratelimit-remaining") === "0") {
             const reset = Number(res.headers.get("x-ratelimit-reset") ?? 0) * 1000;
             const when = reset ? new Date(reset).toLocaleTimeString() : "later";
-            throw new GitHubError(res.status, `GitHub rate limit reached; it resets at ${when}.${token ? "" : " Set GITHUB_TOKEN to get a higher limit."}`);
+            throw new GitHubError(res.status, `GitHub rate limit reached; it resets at ${when}.${token ? "" : " Log in with 'gh auth login' or set GITHUB_TOKEN for a higher limit."}`);
         }
         if (res.status === 404)
             throw new GitHubError(404, `Not found: ${path}. Check the name, or set GITHUB_TOKEN for private repositories.`);

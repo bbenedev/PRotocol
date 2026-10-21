@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EXIT, EXIT_USAGE, run } from "../../src/cli/main.ts";
+import { EXIT, EXIT_USAGE, findToken, run } from "../../src/cli/main.ts";
 import { clean } from "../../src/cli/render.ts";
 import { repoFromRemote, resolvePullTarget, type Git } from "../../src/cli/target.ts";
 import type { GitHubClient } from "../../src/github/api.ts";
@@ -84,7 +84,16 @@ const io = (c: ReturnType<typeof capture>, gh: GitHubClient, git: Git = gitIn("g
   env: {},
   isTty: false,
   git,
+  ghToken: () => null,
   client: gh,
+});
+
+test("the token comes from GITHUB_TOKEN, then GH_TOKEN, then the gh session", () => {
+  const fromGh = () => "from-gh";
+  assert.equal(findToken({ GITHUB_TOKEN: "a", GH_TOKEN: "b" }, fromGh), "a");
+  assert.equal(findToken({ GH_TOKEN: "b" }, fromGh), "b");
+  assert.equal(findToken({}, fromGh), "from-gh");
+  assert.equal(findToken({}, () => null), undefined);
 });
 
 test("check: the exit code is the verdict", async () => {

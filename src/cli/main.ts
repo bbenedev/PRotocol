@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // The `protocol` command.
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -39,9 +40,10 @@ Options:
   -h, --help                show this help
   -V, --version             show the version
 
-Environment:
-  GITHUB_TOKEN   for private repositories and a higher rate limit
-                 with the GitHub CLI: export GITHUB_TOKEN=$(gh auth token)
+Authentication (first one found):
+  GITHUB_TOKEN or GH_TOKEN    environment variable
+  gh auth token               the GitHub CLI session, if gh is installed and logged in
+  (none)                      public repositories only, 60 requests per hour
 
 Exit status of 'check':
   0 ready   1 blocked   2 waiting   3 unknown or error   64 usage error
@@ -54,8 +56,24 @@ interface Io {
   env: Record<string, string | undefined>;
   isTty: boolean;
   git: Git;
+  /** Token from the GitHub CLI session, or null when gh is missing or logged out. */
+  ghToken: () => string | null;
   client?: GitHubClient;
 }
+
+export function findToken(env: Record<string, string | undefined>, ghToken: () => string | null): string | undefined {
+  return env.GITHUB_TOKEN || env.GH_TOKEN || ghToken() || undefined;
+}
+
+export const realGhToken = (): string | null => {
+  try {
+    // The token never leaves this process except in the Authorization header to api.github.com.
+    const t = execFileSync("gh", ["auth", "token"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 }).trim();
+    return t || null;
+  } catch {
+    return null;
+  }
+};
 
 function version(): string {
   const pkg = join(dirname(realpathSync(import.meta.filename)), "..", "..", "package.json");
@@ -99,7 +117,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
 
   const paint: Paint = io.isTty && !opt["no-color"] && !io.env.NO_COLOR ? ansi : plain;
-  const gh = io.client ?? createClient(io.env.GITHUB_TOKEN);
+  const token = io.client ? undefined : findToken(io.env, io.ghToken);
+  const gh = io.client ?? createClient(token);
   const say = (s: string) => {
     if (!opt.quiet) io.out(s);
   };
@@ -146,7 +165,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       io.err("prot: --limit must be a whole number from 1 to 50.");
       return EXIT_USAGE;
     }
-    if (!io.env.GITHUB_TOKEN) io.err(paint(90, "note: without GITHUB_TOKEN GitHub allows 60 requests per hour; 'list' may run out."));
+    if (!io.client && !token) io.err(paint(90, "note: not logged in to GitHub (no GITHUB_TOKEN, no gh session): 60 requests per hour; 'list' may run out."));
     const pulls = await openPulls(gh, repo.owner, repo.repo, limit);
     if (pulls.length === 0) {
       say(`No open pull requests in ${repo.owner}/${repo.repo}.`);
@@ -178,5 +197,6 @@ if (invoked === realpathSync(import.meta.filename)) {
     env: process.env,
     isTty: process.stdout.isTTY === true,
     git: realGit,
+    ghToken: realGhToken,
   });
 }

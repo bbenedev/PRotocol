@@ -34,12 +34,12 @@ prot --version
 ```
 
 This installs the command under two names: `prot` and `protocol`. They are the same program.
-Requires Node.js 22.18 or newer. Public repositories work without a token. For private ones,
-or a higher rate limit, export one (with the GitHub CLI it is one line):
+Requires Node.js 22.18 or newer.
 
-```bash
-export GITHUB_TOKEN=$(gh auth token)
-```
+**Authentication.** If you are logged in with the [GitHub CLI](https://cli.github.com)
+(`gh auth login`), there is nothing to set up: `prot` uses that session. Otherwise it reads
+`GITHUB_TOKEN` or `GH_TOKEN`. With none of them it still works on public repositories, limited
+to 60 requests per hour.
 
 ## Usage
 
