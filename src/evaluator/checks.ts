@@ -80,7 +80,7 @@ export function evaluateCheck(
       status: "pending",
       freshness: freshnessOf(latest, pr),
       actor: { kind: "ci" },
-      explanation: latest.status === "queued" ? "Queued." : "Running.",
+      explanation: latest.status === "queued" ? "Queued." : "Not finished yet.",
       evidenceUrls: urls,
     };
   }
