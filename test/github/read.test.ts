@@ -63,7 +63,7 @@ test("parses owner/repo#number and pull request URLs", () => {
 test("rulesets and classic required checks become check requirements, without duplicates", () => {
   const notes: string[] = [];
   const reqs = requirementsFrom(
-    { protected: true, protection: { required_status_checks: { checks: [{ context: "test", app_id: null }, { context: "lint", app_id: 9 }] } } },
+    { protected: true, protection: { enabled: true, required_status_checks: { checks: [{ context: "test", app_id: null }, { context: "lint", app_id: 9 }] } } },
     [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "test", integration_id: 1 }], strict_required_status_checks_policy: true } }],
     notes,
   );
@@ -72,6 +72,26 @@ test("rulesets and classic required checks become check requirements, without du
     { kind: "check", context: "lint", appId: 9 },
   ]);
   assert.match(notes[0] ?? "", /only visible to repository admins/);
+});
+
+test("a branch protected only by rulesets gets no note about classic protection", () => {
+  const notes: string[] = [];
+  requirementsFrom({ protected: true, protection: { enabled: false } }, [], notes);
+  assert.deepEqual(notes, []);
+});
+
+test("readable classic protection adds its reviews and strict checks instead of a note", () => {
+  const notes: string[] = [];
+  const reqs = requirementsFrom({ protected: true, protection: { enabled: true } }, [], notes, {
+    required_status_checks: { strict: true, checks: [{ context: "build", app_id: 15368 }] },
+    required_pull_request_reviews: { required_approving_review_count: 1, dismiss_stale_reviews: true, require_last_push_approval: true },
+  });
+  assert.deepEqual(reqs, [
+    { kind: "check", context: "build", appId: 15368, strict: true },
+    { kind: "approvals", count: 1, requireCurrentHead: true },
+    { kind: "last-push-approval", lastPusher: null },
+  ]);
+  assert.deepEqual(notes, []);
 });
 
 test("pull request rules become approval and latest-push requirements", () => {

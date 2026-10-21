@@ -23,7 +23,18 @@ interface ApiPull {
 }
 interface ApiBranch {
   protected: boolean;
-  protection?: { required_status_checks?: { checks?: { context: string; app_id: number | null }[] } };
+  /** `enabled` is true only for classic branch protection, not for rulesets. */
+  protection?: { enabled?: boolean; required_status_checks?: { checks?: { context: string; app_id: number | null }[] } };
+}
+/** Classic branch protection, readable only by repository admins. */
+export interface ApiClassicProtection {
+  required_status_checks?: { strict?: boolean; checks?: { context: string; app_id: number | null }[] } | null;
+  required_pull_request_reviews?: {
+    required_approving_review_count?: number;
+    dismiss_stale_reviews?: boolean;
+    require_code_owner_reviews?: boolean;
+    require_last_push_approval?: boolean;
+  } | null;
 }
 interface ApiRule {
   type: string;
@@ -125,7 +136,12 @@ function latestStatuses(statuses: ApiStatus[], commitSha: string): CheckEvidence
   return out;
 }
 
-export function requirementsFrom(branch: ApiBranch, rules: ApiRule[], notes: string[]): Requirement[] {
+export function requirementsFrom(
+  branch: ApiBranch,
+  rules: ApiRule[],
+  notes: string[],
+  classic: ApiClassicProtection | null = null,
+): Requirement[] {
   const reqs: Requirement[] = [];
   const seen = new Set<string>();
   const addCheck = (context: string, appId: number | null | undefined, strict: boolean | undefined) => {
@@ -155,11 +171,20 @@ export function requirementsFrom(branch: ApiBranch, rules: ApiRule[], notes: str
       if (p.require_last_push_approval) reqs.push({ kind: "last-push-approval", lastPusher: null });
     }
   }
+  if (classic) {
+    const strict = classic.required_status_checks?.strict;
+    for (const c of classic.required_status_checks?.checks ?? []) addCheck(c.context, c.app_id, strict);
+    const r = classic.required_pull_request_reviews;
+    if (r && (r.required_approving_review_count ?? 0) > 0) {
+      reqs.push({ kind: "approvals", count: r.required_approving_review_count ?? 0, requireCurrentHead: r.dismiss_stale_reviews === true });
+    }
+    if (r?.require_last_push_approval) reqs.push({ kind: "last-push-approval", lastPusher: null });
+  }
   for (const c of branch.protection?.required_status_checks?.checks ?? []) addCheck(c.context, c.app_id, undefined);
 
-  if (branch.protected) {
+  if (branch.protection?.enabled === true && !classic) {
     notes.push(
-      "The base branch is protected. Review rules of classic branch protection are only visible to repository admins; if it uses them, they are not included.",
+      "The base branch uses classic branch protection. Its review rules are only visible to repository admins, so they are not included.",
     );
   }
   return reqs;
@@ -182,8 +207,13 @@ export async function readBranchRules(gh: GitHubClient, owner: string, repo: str
   const missingData: string[] = [];
   const notes: string[] = [];
   if (rules === null) missingData.push("the rulesets of the base branch");
-  const requirements = requirementsFrom(info, rules ?? [], notes);
-  if ((rules ?? []).some((r) => r.type === "pull_request" && r.parameters?.require_code_owner_review)) {
+  const classic =
+    info.protection?.enabled === true ? await gh.tryGet<ApiClassicProtection>(`${path}/branches/${b}/protection`) : null;
+  const requirements = requirementsFrom(info, rules ?? [], notes, classic);
+  const codeOwners =
+    (rules ?? []).some((r) => r.type === "pull_request" && r.parameters?.require_code_owner_review) ||
+    classic?.required_pull_request_reviews?.require_code_owner_reviews === true;
+  if (codeOwners) {
     missingData.push("code owner rules (not supported yet)");
   }
   return { requirements, missingData, notes };
