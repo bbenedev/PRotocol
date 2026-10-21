@@ -16,7 +16,6 @@
   },
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
-    "prepare": "npm run build",
     "test": "node --test \"test/**/*.test.ts\"",
     "typecheck": "tsc",
     "check": "npm run typecheck && npm test"
