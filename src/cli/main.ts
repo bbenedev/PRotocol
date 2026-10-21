@@ -18,9 +18,11 @@ export const EXIT_USAGE = 64;
 export const HELP = `protocol - explain why a pull request can or cannot be merged, and who has to act
 
 Usage:
-  protocol check [<pull-request>] [options]   evaluate one pull request
-  protocol rules [<branch>] [options]         show what a branch requires before merging
-  protocol list [options]                     every open pull request with its verdict
+  prot check [<pull-request>] [options]   evaluate one pull request
+  prot rules [<branch>] [options]         show what a branch requires before merging
+  prot list [options]                     every open pull request with its verdict
+
+  'prot' is the short name; 'protocol' runs the same command.
 
 <pull-request> can be:
   1418                                  number, in the repository of the current directory
@@ -77,7 +79,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       },
     });
   } catch (err) {
-    io.err(`protocol: ${(err as Error).message}\nTry 'protocol --help'.`);
+    io.err(`prot: ${(err as Error).message}\nTry 'prot --help'.`);
     return EXIT_USAGE;
   }
   const { values: opt, positionals } = parsed;
@@ -92,7 +94,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return opt.help || command === "help" ? 0 : EXIT_USAGE;
   }
   if (extra.length > 0 || !["check", "rules", "list"].includes(command) || (command === "list" && arg)) {
-    io.err(`protocol: unexpected '${extra[0] ?? (command === "list" ? arg : command)}'\nTry 'protocol --help'.`);
+    io.err(`prot: unexpected '${extra[0] ?? (command === "list" ? arg : command)}'\nTry 'prot --help'.`);
     return EXIT_USAGE;
   }
 
@@ -110,7 +112,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
       else {
         const n = await pullForBranch(gh, target.repo.owner, target.repo.repo, target.branch);
         if (n === null) {
-          io.err(`protocol: no open pull request for branch '${target.branch}' in ${target.repo.owner}/${target.repo.repo}.`);
+          io.err(`prot: no open pull request for branch '${target.branch}' in ${target.repo.owner}/${target.repo.repo}.`);
           return EXIT.unknown;
         }
         ref = { ...target.repo, number: n };
@@ -141,7 +143,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     // list
     const limit = opt.limit === undefined ? 10 : Number(opt.limit);
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
-      io.err("protocol: --limit must be a whole number from 1 to 50.");
+      io.err("prot: --limit must be a whole number from 1 to 50.");
       return EXIT_USAGE;
     }
     if (!io.env.GITHUB_TOKEN) io.err(paint(90, "note: without GITHUB_TOKEN GitHub allows 60 requests per hour; 'list' may run out."));
@@ -160,7 +162,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     return 0;
   } catch (err) {
     if (err instanceof TargetError || err instanceof GitHubError) {
-      io.err(`protocol: ${err.message}`);
+      io.err(`prot: ${err.message}`);
       return err instanceof TargetError ? EXIT_USAGE : EXIT.unknown;
     }
     throw err;

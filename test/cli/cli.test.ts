@@ -113,7 +113,7 @@ test("--json prints the evaluation", async () => {
 test("usage errors exit with 64 and point to --help", async () => {
   const c = capture();
   assert.equal(await run(["frobnicate"], io(c, client("success"))), EXIT_USAGE);
-  assert.match(c.err.join("\n"), /protocol --help/);
+  assert.match(c.err.join("\n"), /prot --help/);
   assert.equal(await run(["check", "--bogus"], io(capture(), client("success"))), EXIT_USAGE);
   assert.equal(await run(["list", "-n", "0"], io(capture(), client("success"))), EXIT_USAGE);
 });

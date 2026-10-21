@@ -30,9 +30,10 @@ and tells you, in one screen, what is missing, what stopped counting, and whose 
 
 ```bash
 npm install -g https://github.com/bbenedev/PRotocol/archive/refs/heads/main.tar.gz
-protocol --version
+prot --version
 ```
 
+This installs the command under two names: `prot` and `protocol`. They are the same program.
 Requires Node.js 22.18 or newer. Public repositories work without a token. For private ones,
 or a higher rate limit, export one (with the GitHub CLI it is one line):
 
@@ -43,26 +44,26 @@ export GITHUB_TOKEN=$(gh auth token)
 ## Usage
 
 ```text
-protocol check [<pull-request>]   evaluate one pull request
-protocol rules [<branch>]         show what a branch requires before merging
-protocol list                     every open pull request with its verdict
+prot check [<pull-request>]   evaluate one pull request
+prot rules [<branch>]         show what a branch requires before merging
+prot list                     every open pull request with its verdict
 ```
 
 Like `gh`, it works out the repository from the folder you are in:
 
 ```bash
 cd my-project
-protocol check 42          # pull request 42 of this repository
-protocol check             # the pull request of the branch you are on
-protocol list              # all open pull requests, who has to act on each
+prot check 42          # pull request 42 of this repository
+prot check             # the pull request of the branch you are on
+prot list              # all open pull requests, who has to act on each
 ```
 
 Or point it anywhere:
 
 ```bash
-protocol check owner/repo#42
-protocol check https://github.com/owner/repo/pull/42
-protocol list -R owner/repo
+prot check owner/repo#42
+prot check https://github.com/owner/repo/pull/42
+prot list -R owner/repo
 ```
 
 | Option | |
@@ -85,7 +86,7 @@ shows one situation.
 **The maintainer's view:** every open pull request and whose move it is.
 
 ```console
-$ protocol list -R bbenedev/protocol-sandbox
+$ prot list -R bbenedev/protocol-sandbox
 #3      WAITING  ci                 Stale: green on an older commit
 #4      BLOCKED  author             Draft: not ready for review
 #2      BLOCKED  author             Failing: the required check is red
@@ -95,7 +96,7 @@ $ protocol list -R bbenedev/protocol-sandbox
 **A failing check:** blocked, the author has to act, and the link goes to the log.
 
 ```console
-$ protocol check -R bbenedev/protocol-sandbox 2
+$ prot check -R bbenedev/protocol-sandbox 2
 bbenedev/protocol-sandbox#2
 BLOCKED  head 22d9fbe  base b5e9376
 
@@ -108,7 +109,7 @@ BLOCKED  head 22d9fbe  base b5e9376
 push has no result, so the pull request is not ready, even though a green tick is on the page.
 
 ```console
-$ protocol check -R bbenedev/protocol-sandbox 3
+$ prot check -R bbenedev/protocol-sandbox 3
 bbenedev/protocol-sandbox#3
 WAITING  head 8b4d2c5  base b5e9376
 
@@ -120,7 +121,7 @@ WAITING  head 8b4d2c5  base b5e9376
 **What a branch requires:**
 
 ```console
-$ protocol rules -R bbenedev/protocol-sandbox
+$ prot rules -R bbenedev/protocol-sandbox
 bbenedev/protocol-sandbox: main
 
 • check "test" from GitHub Actions
@@ -142,7 +143,7 @@ Every open item says **who acts**: the author, a reviewer, CI or a maintainer.
 
 ## Scripts and CI
 
-The exit code of `protocol check` is the verdict:
+The exit code of `prot check` is the verdict:
 
 | Code | Verdict |
 |---|---|
@@ -153,8 +154,8 @@ The exit code of `protocol check` is the verdict:
 | `64` | usage error |
 
 ```bash
-protocol check -q 42 && echo "ready to merge"
-protocol check --json 42 | jq '.results[] | select(.status != "met")'
+prot check -q 42 && echo "ready to merge"
+prot check --json 42 | jq '.results[] | select(.status != "met")'
 ```
 
 ## How it works

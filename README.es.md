@@ -31,9 +31,10 @@ le toca moverse.
 
 ```bash
 npm install -g https://github.com/bbenedev/PRotocol/archive/refs/heads/main.tar.gz
-protocol --version
+prot --version
 ```
 
+Esto instala el comando con dos nombres: `prot` y `protocol`. Son el mismo programa.
 Necesita Node.js 22.18 o más nuevo. Los repositorios públicos andan sin token. Para los
 privados, o para tener más consultas por hora, exportá uno (con la CLI de GitHub es una línea):
 
@@ -44,26 +45,26 @@ export GITHUB_TOKEN=$(gh auth token)
 ## Uso
 
 ```text
-protocol check [<pull-request>]   revisa un pull request
-protocol rules [<rama>]           muestra qué exige una rama antes de fusionar
-protocol list                     todos los pull requests abiertos con su veredicto
+prot check [<pull-request>]   revisa un pull request
+prot rules [<rama>]           muestra qué exige una rama antes de fusionar
+prot list                     todos los pull requests abiertos con su veredicto
 ```
 
 Como `gh`, deduce el repositorio de la carpeta en la que estás:
 
 ```bash
 cd mi-proyecto
-protocol check 42          # el pull request 42 de este repositorio
-protocol check             # el pull request de la rama en la que estás
-protocol list              # todos los abiertos, y a quién le toca cada uno
+prot check 42          # el pull request 42 de este repositorio
+prot check             # el pull request de la rama en la que estás
+prot list              # todos los abiertos, y a quién le toca cada uno
 ```
 
 O apuntalo a cualquier lado:
 
 ```bash
-protocol check dueño/repo#42
-protocol check https://github.com/dueño/repo/pull/42
-protocol list -R dueño/repo
+prot check dueño/repo#42
+prot check https://github.com/dueño/repo/pull/42
+prot list -R dueño/repo
 ```
 
 | Opción | |
@@ -86,7 +87,7 @@ situación. El programa escribe en inglés.
 **La vista de quien mantiene el repo:** todos los pull requests abiertos y a quién le toca.
 
 ```console
-$ protocol list -R bbenedev/protocol-sandbox
+$ prot list -R bbenedev/protocol-sandbox
 #3      WAITING  ci                 Stale: green on an older commit
 #4      BLOCKED  author             Draft: not ready for review
 #2      BLOCKED  author             Failing: the required check is red
@@ -96,7 +97,7 @@ $ protocol list -R bbenedev/protocol-sandbox
 **Un check que falla:** bloqueado, actúa el autor, y el link lleva al registro.
 
 ```console
-$ protocol check -R bbenedev/protocol-sandbox 2
+$ prot check -R bbenedev/protocol-sandbox 2
 bbenedev/protocol-sandbox#2
 BLOCKED  head 22d9fbe  base b5e9376
 
@@ -109,7 +110,7 @@ BLOCKED  head 22d9fbe  base b5e9376
 resultado, así que el pull request no está listo, aunque en la página se vea una tilde verde.
 
 ```console
-$ protocol check -R bbenedev/protocol-sandbox 3
+$ prot check -R bbenedev/protocol-sandbox 3
 bbenedev/protocol-sandbox#3
 WAITING  head 8b4d2c5  base b5e9376
 
@@ -121,7 +122,7 @@ WAITING  head 8b4d2c5  base b5e9376
 **Qué exige una rama:**
 
 ```console
-$ protocol rules -R bbenedev/protocol-sandbox
+$ prot rules -R bbenedev/protocol-sandbox
 bbenedev/protocol-sandbox: main
 
 • check "test" from GitHub Actions
@@ -143,7 +144,7 @@ Cada punto pendiente dice **quién actúa**: el autor, un revisor, la CI o quien
 
 ## Scripts y CI
 
-El código de salida de `protocol check` es el veredicto:
+El código de salida de `prot check` es el veredicto:
 
 | Código | Veredicto |
 |---|---|
@@ -154,8 +155,8 @@ El código de salida de `protocol check` es el veredicto:
 | `64` | error de uso |
 
 ```bash
-protocol check -q 42 && echo "listo para fusionar"
-protocol check --json 42 | jq '.results[] | select(.status != "met")'
+prot check -q 42 && echo "listo para fusionar"
+prot check --json 42 | jq '.results[] | select(.status != "met")'
 ```
 
 ## Cómo funciona

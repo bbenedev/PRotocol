@@ -1,12 +1,13 @@
 {
   "name": "protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Explains whether a pull request can be merged, what stopped counting and who has to act",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "protocol": "dist/cli/main.js"
+    "protocol": "dist/cli/main.js",
+    "prot": "dist/cli/main.js"
   },
   "files": [
     "dist"
