@@ -147,9 +147,7 @@ test("the spinner draws on one line and erases itself", () => {
   s.update("Still working…");
   s.stop();
   s.stop();
-  assert.ok(screen.startsWith("\r⠋ Working…"));
-  assert.ok(screen.endsWith(`\r${" ".repeat("⠋ Working…".length)}\r`));
-  assert.equal(screen.split("\r").length, 4, "drawn once, erased once, stop twice draws nothing more");
+  assert.equal(screen, "\r⠋ Working…\x1b[K\r\x1b[K", "drawn once, erased once; a second stop writes nothing");
 });
 
 test("the token comes from GITHUB_TOKEN, then GH_TOKEN, then the gh session", () => {

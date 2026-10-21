@@ -13,13 +13,11 @@ export const noSpinner: Spinner = { update() {}, stop() {} };
 export function startSpinner(write: (s: string) => void, text: string, intervalMs = 80): Spinner {
   let frame = 0;
   let current = text;
-  let width = 0;
   let stopped = false;
+  // "\x1b[K" erases the rest of the line, so a shorter message fully replaces a longer one
+  // and the cursor stays right after the text.
   const draw = () => {
-    const line = `${FRAMES[frame % FRAMES.length]} ${current}`;
-    // Pad with spaces so a shorter message fully covers a longer one.
-    write(`\r${line.padEnd(width)}`);
-    width = Math.max(width, line.length);
+    write(`\r${FRAMES[frame % FRAMES.length]} ${current}\x1b[K`);
     frame++;
   };
   draw();
@@ -32,7 +30,7 @@ export function startSpinner(write: (s: string) => void, text: string, intervalM
       if (stopped) return;
       stopped = true;
       clearInterval(timer);
-      write(`\r${" ".repeat(width)}\r`);
+      write("\r\x1b[K");
     },
   };
 }
