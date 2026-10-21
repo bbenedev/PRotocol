@@ -165,25 +165,65 @@ export function requirementsFrom(branch: ApiBranch, rules: ApiRule[], notes: str
   return reqs;
 }
 
+export interface BranchRules {
+  requirements: Requirement[];
+  missingData: string[];
+  notes: string[];
+}
+
+/** What GitHub requires before merging into `branch`, as far as the caller is allowed to see. */
+export async function readBranchRules(gh: GitHubClient, owner: string, repo: string, branch: string): Promise<BranchRules> {
+  const path = `/repos/${owner}/${repo}`;
+  const b = encodeURIComponent(branch);
+  const [info, rules] = await Promise.all([
+    gh.get<ApiBranch>(`${path}/branches/${b}`),
+    gh.tryGet<ApiRule[]>(`${path}/rules/branches/${b}`),
+  ]);
+  const missingData: string[] = [];
+  const notes: string[] = [];
+  if (rules === null) missingData.push("the rulesets of the base branch");
+  const requirements = requirementsFrom(info, rules ?? [], notes);
+  if ((rules ?? []).some((r) => r.type === "pull_request" && r.parameters?.require_code_owner_review)) {
+    missingData.push("code owner rules (not supported yet)");
+  }
+  return { requirements, missingData, notes };
+}
+
+export async function defaultBranch(gh: GitHubClient, owner: string, repo: string): Promise<string> {
+  return (await gh.get<{ default_branch: string }>(`/repos/${owner}/${repo}`)).default_branch;
+}
+
+export interface OpenPull {
+  number: number;
+  title: string;
+}
+
+export async function openPulls(gh: GitHubClient, owner: string, repo: string, limit: number): Promise<OpenPull[]> {
+  const per = Math.min(Math.max(limit, 1), 100);
+  return gh.get<OpenPull[]>(`/repos/${owner}/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=${per}`);
+}
+
+/** The open pull request whose head is `branch` in the same repository, or null. */
+export async function pullForBranch(gh: GitHubClient, owner: string, repo: string, branch: string): Promise<number | null> {
+  const head = encodeURIComponent(`${owner}:${branch}`);
+  const found = await gh.get<{ number: number }[]>(`/repos/${owner}/${repo}/pulls?state=open&head=${head}&per_page=1`);
+  return found[0]?.number ?? null;
+}
+
 export async function readPullRequest(gh: GitHubClient, ref: PullRef): Promise<EvaluationInput> {
   const repo = `/repos/${ref.owner}/${ref.repo}`;
   const missingData: string[] = [];
   const notes: string[] = [];
 
   const pull = await gh.get<ApiPull>(`${repo}/pulls/${ref.number}`);
-  const baseRef = encodeURIComponent(pull.base.ref);
-  const [branch, rules, commits, reviews] = await Promise.all([
-    gh.get<ApiBranch>(`${repo}/branches/${baseRef}`),
-    gh.tryGet<ApiRule[]>(`${repo}/rules/branches/${baseRef}`),
+  const [branchRules, commits, reviews] = await Promise.all([
+    readBranchRules(gh, ref.owner, ref.repo, pull.base.ref),
     gh.get<{ sha: string }[]>(`${repo}/pulls/${ref.number}/commits?per_page=100`),
     gh.get<ApiReview[]>(`${repo}/pulls/${ref.number}/reviews?per_page=100`),
   ]);
-  if (rules === null) missingData.push("the rulesets of the base branch");
-
-  const requirements = requirementsFrom(branch, rules ?? [], notes);
-  if ((rules ?? []).some((r) => r.type === "pull_request" && r.parameters?.require_code_owner_review)) {
-    missingData.push("code owner rules (not supported yet)");
-  }
+  const { requirements } = branchRules;
+  missingData.push(...branchRules.missingData);
+  notes.push(...branchRules.notes);
 
   // Head first, then a few earlier commits, to recognise results that belong to older pushes.
   const shas = [pull.head.sha, ...commits.map((c) => c.sha).filter((s) => s !== pull.head.sha).slice(-OLDER_COMMITS)];
