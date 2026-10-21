@@ -25,6 +25,8 @@ le toca moverse.
 
 </div>
 
+<p align="center"><img src="assets/demo.gif" width="800" alt="prot list y prot check corriendo contra el repositorio de prueba"></p>
+
 ---
 
 ## Instalar

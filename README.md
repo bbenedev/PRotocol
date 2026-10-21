@@ -24,6 +24,8 @@ and tells you, in one screen, what is missing, what stopped counting, and whose 
 
 </div>
 
+<p align="center"><img src="assets/demo.gif" width="800" alt="prot list and prot check running against the demo repository"></p>
+
 ---
 
 ## Install
