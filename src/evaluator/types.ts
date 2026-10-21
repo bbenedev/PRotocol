@@ -105,6 +105,8 @@ export interface EvaluationInput {
   reviews: ReviewEvidence[];
   /** Anything the GitHub layer could not read. Non-empty means the verdict is "unknown". */
   missingData: string[];
+  /** Limits of what could be read that do not make the verdict unknown; shown to the user. */
+  notes?: string[];
 }
 
 export interface Evaluation {

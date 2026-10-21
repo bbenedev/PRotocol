@@ -91,7 +91,7 @@ export function evaluate(input: EvaluationInput): Evaluation {
   }
 
   const results = [...pullRequestResults(input), ...requirementResults(input)];
-  const notes: string[] = [];
+  const notes: string[] = [...(input.notes ?? [])];
   if (input.requirements.length === 0) {
     notes.push("The base branch has no required checks or reviews, so only drafts and conflicts can block.");
   }
