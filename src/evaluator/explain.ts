@@ -72,7 +72,7 @@ export function renderCheckRun(evaluation: Evaluation): { title: string; summary
         .map((u, i) => `[${i === 0 ? "evidence" : i + 1}](${u})`)
         .join(" ");
       lines.push(
-        `| ${ICON[r.status]} | ${escapeUntrusted(r.label)} | ${who(r)} | ${escapeUntrusted(r.explanation)} ${links} |`,
+        `| ${ICON[r.status]} | ${escapeUntrusted(r.label)} | ${who(r)} | ${escapeUntrusted(r.explanation)}${links ? ` ${links}` : ""} |`,
       );
     }
   }
