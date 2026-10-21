@@ -16,7 +16,14 @@ export interface GitHubClient {
   tryGet<T>(path: string): Promise<T | null>;
 }
 
-export function createClient(token: string | undefined, fetcher: Fetcher = fetch): GitHubClient {
+// Every request is a GET, so a network failure can be retried safely.
+const RETRY_DELAYS_MS = [500, 2000];
+
+export function createClient(
+  token: string | undefined,
+  fetcher: Fetcher = fetch,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): GitHubClient {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -24,15 +31,25 @@ export function createClient(token: string | undefined, fetcher: Fetcher = fetch
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  async function request<T>(path: string, soft: boolean): Promise<T | null> {
-    let res: Response;
-    try {
-      res = await fetcher(`https://api.github.com${path}`, { headers });
-    } catch (err) {
-      // fetch rejects on network failures (no connection, DNS, timeout): say so plainly.
-      const cause = (err as { cause?: { code?: string } }).cause?.code;
-      throw new GitHubError(0, `Could not reach GitHub${cause ? ` (${cause})` : ""}. Check your connection and try again.`);
+  async function send(path: string): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fetcher(`https://api.github.com${path}`, { headers });
+      } catch (err) {
+        // fetch rejects on network failures (no connection, DNS, timeout).
+        const delay = RETRY_DELAYS_MS[attempt];
+        if (delay !== undefined) {
+          await sleep(delay);
+          continue;
+        }
+        const cause = (err as { cause?: { code?: string } }).cause?.code;
+        throw new GitHubError(0, `Could not reach GitHub${cause ? ` (${cause})` : ""}. Check your connection and try again.`);
+      }
     }
+  }
+
+  async function request<T>(path: string, soft: boolean): Promise<T | null> {
+    const res = await send(path);
     if (res.ok) return (await res.json()) as T;
     if (soft && (res.status === 403 || res.status === 404) && res.headers.get("x-ratelimit-remaining") !== "0") {
       return null;

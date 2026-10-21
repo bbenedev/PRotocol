@@ -6,7 +6,9 @@ export class GitHubError extends Error {
         this.status = status;
     }
 }
-export function createClient(token, fetcher = fetch) {
+// Every request is a GET, so a network failure can be retried safely.
+const RETRY_DELAYS_MS = [500, 2000];
+export function createClient(token, fetcher = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms))) {
     const headers = {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -14,16 +16,25 @@ export function createClient(token, fetcher = fetch) {
     };
     if (token)
         headers.Authorization = `Bearer ${token}`;
+    async function send(path) {
+        for (let attempt = 0;; attempt++) {
+            try {
+                return await fetcher(`https://api.github.com${path}`, { headers });
+            }
+            catch (err) {
+                // fetch rejects on network failures (no connection, DNS, timeout).
+                const delay = RETRY_DELAYS_MS[attempt];
+                if (delay !== undefined) {
+                    await sleep(delay);
+                    continue;
+                }
+                const cause = err.cause?.code;
+                throw new GitHubError(0, `Could not reach GitHub${cause ? ` (${cause})` : ""}. Check your connection and try again.`);
+            }
+        }
+    }
     async function request(path, soft) {
-        let res;
-        try {
-            res = await fetcher(`https://api.github.com${path}`, { headers });
-        }
-        catch (err) {
-            // fetch rejects on network failures (no connection, DNS, timeout): say so plainly.
-            const cause = err.cause?.code;
-            throw new GitHubError(0, `Could not reach GitHub${cause ? ` (${cause})` : ""}. Check your connection and try again.`);
-        }
+        const res = await send(path);
         if (res.ok)
             return (await res.json());
         if (soft && (res.status === 403 || res.status === 404) && res.headers.get("x-ratelimit-remaining") !== "0") {

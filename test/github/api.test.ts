@@ -5,15 +5,42 @@ import { createClient, GitHubError, type Fetcher } from "../../src/github/api.ts
 const respond = (status: number, body: unknown = {}, headers: Record<string, string> = {}): Fetcher =>
   async () => new Response(JSON.stringify(body), { status, headers });
 
-test("a network failure becomes a readable error, not a stack trace", async () => {
+const noWait = async () => {};
+const networkError = () => Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } });
+
+test("a network failure becomes a readable error, not a stack trace, after two retries", async () => {
+  let calls = 0;
   const offline: Fetcher = async () => {
-    throw Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } });
+    calls++;
+    throw networkError();
   };
-  await assert.rejects(createClient(undefined, offline).get("/x"), (e: unknown) => {
+  await assert.rejects(createClient(undefined, offline, noWait).get("/x"), (e: unknown) => {
     assert.ok(e instanceof GitHubError);
     assert.match(e.message, /Could not reach GitHub \(UND_ERR_CONNECT_TIMEOUT\)/);
     return true;
   });
+  assert.equal(calls, 3);
+});
+
+test("a brief network failure is retried and the request succeeds", async () => {
+  let calls = 0;
+  const flaky: Fetcher = async () => {
+    calls++;
+    if (calls === 1) throw networkError();
+    return new Response('{"ok":true}', { status: 200 });
+  };
+  assert.deepEqual(await createClient(undefined, flaky, noWait).get("/x"), { ok: true });
+  assert.equal(calls, 2);
+});
+
+test("an HTTP error is not retried", async () => {
+  let calls = 0;
+  const failing: Fetcher = async () => {
+    calls++;
+    return new Response("{}", { status: 500 });
+  };
+  await assert.rejects(createClient(undefined, failing, noWait).get("/x"), /answered 500/);
+  assert.equal(calls, 1);
 });
 
 test("tryGet turns 404 and 403 into null", async () => {
