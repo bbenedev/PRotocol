@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 import { evaluate } from "../evaluator/evaluate.js";
 import { createClient, GitHubError } from "../github/api.js";
 import { defaultBranch, openPulls, pullForBranch, readBranchRules, readPullRequest } from "../github/read.js";
-import { actorsOf, ansi, clean, describeRequirement, plain, renderEvaluation, verdictWord } from "./render.js";
+import { actorsOf, ansi, clean, describeRequirement, formatList, plain, renderEvaluation } from "./render.js";
 import { realGit, resolvePullTarget, resolveRepo, TargetError } from "./target.js";
 // Exit codes follow the verdict, so scripts and CI can use `protocol check` directly.
 export const EXIT = { ready: 0, blocked: 1, pending: 2, unknown: 3 };
@@ -157,11 +157,8 @@ export async function run(argv, io) {
         for (const p of pulls.slice(0, limit)) {
             const e = evaluate(await readPullRequest(gh, { ...repo, number: p.number }));
             rows.push({ number: p.number, title: p.title, verdict: e.verdict, actors: actorsOf(e) });
-            if (!opt.json)
-                say(`#${String(p.number).padEnd(6)} ${verdictWord(e.verdict, paint)}  ${actorsOf(e).padEnd(18)} ${clean(p.title).slice(0, 60)}`);
         }
-        if (opt.json)
-            say(JSON.stringify(rows, null, 2));
+        say(opt.json ? JSON.stringify(rows, null, 2) : formatList(rows, paint, io.columns));
         return 0;
     }
     catch (err) {
@@ -180,6 +177,7 @@ if (invoked === realpathSync(import.meta.filename)) {
         err: (s) => console.error(s),
         env: process.env,
         isTty: process.stdout.isTTY === true,
+        columns: process.stdout.columns,
         git: realGit,
         ghToken: realGhToken,
     });

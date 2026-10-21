@@ -50,7 +50,24 @@ export function describeRequirement(r) {
             return "approval of the latest push by someone else";
     }
 }
-/** Who has to act, summarised for one line of `protocol list`. */
+/**
+ * One line per pull request. Columns are as wide as their longest value, and the title is cut
+ * with "…" to fit the terminal, so a line never wraps. Without a known width nothing is cut.
+ */
+export function formatList(rows, paint, columns) {
+    const numW = Math.max(...rows.map((r) => String(r.number).length)) + 1;
+    const actW = Math.max(...rows.map((r) => r.actors.length));
+    const fixed = numW + 2 + 7 + 2 + actW + 2;
+    const room = columns && columns > fixed + 10 ? columns - fixed - 1 : Infinity;
+    return rows
+        .map((r) => {
+        const title = clean(r.title);
+        const cut = title.length > room ? `${title.slice(0, room - 1)}…` : title;
+        return `${`#${r.number}`.padEnd(numW)}  ${verdictWord(r.verdict, paint)}  ${r.actors.padEnd(actW)}  ${cut}`;
+    })
+        .join("\n");
+}
+/** Who has to act, summarised for one line of `prot list`. */
 export function actorsOf(e) {
     const kinds = new Set();
     for (const r of e.results)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EXIT, EXIT_USAGE, findToken, run } from "../../src/cli/main.ts";
-import { clean } from "../../src/cli/render.ts";
+import { clean, formatList, plain } from "../../src/cli/render.ts";
 import { repoFromRemote, resolvePullTarget, type Git } from "../../src/cli/target.ts";
 import type { GitHubClient } from "../../src/github/api.ts";
 
@@ -45,6 +45,18 @@ test("no argument means the pull request of the current branch", () => {
 
 test("outside a repository a bare number is a clear error", () => {
   assert.throws(() => resolvePullTarget("12", undefined, gitIn(null)), /--repo owner\/repo/);
+});
+
+test("list lines fit the terminal: tight columns and long titles cut with an ellipsis", () => {
+  const rows = [
+    { number: 3, title: "Stale: green on an older commit", verdict: "pending" as const, actors: "ci" },
+    { number: 12, title: "Passing", verdict: "ready" as const, actors: "—" },
+  ];
+  const lines = formatList(rows, plain, 40).split("\n");
+  assert.equal(lines[0], "#3   WAITING  ci  Stale: green on an o…");
+  assert.equal(lines[1], "#12  READY    —   Passing");
+  assert.ok(lines.every((l) => l.length < 40));
+  assert.ok(formatList(rows, plain).includes("older commit"), "no width known: nothing is cut");
 });
 
 test("terminal output cannot carry escape sequences from repository text", () => {

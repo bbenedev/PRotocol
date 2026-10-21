@@ -9,7 +9,7 @@ import { evaluate } from "../evaluator/evaluate.ts";
 import type { Verdict } from "../evaluator/types.ts";
 import { createClient, GitHubError, type GitHubClient } from "../github/api.ts";
 import { defaultBranch, openPulls, pullForBranch, readBranchRules, readPullRequest } from "../github/read.ts";
-import { actorsOf, ansi, clean, describeRequirement, plain, renderEvaluation, verdictWord, type Paint } from "./render.ts";
+import { actorsOf, ansi, clean, describeRequirement, formatList, plain, renderEvaluation, type ListRow, type Paint } from "./render.ts";
 import { realGit, resolvePullTarget, resolveRepo, TargetError, type Git } from "./target.ts";
 
 // Exit codes follow the verdict, so scripts and CI can use `protocol check` directly.
@@ -55,6 +55,8 @@ interface Io {
   err: (s: string) => void;
   env: Record<string, string | undefined>;
   isTty: boolean;
+  /** Terminal width, when known; long titles are cut to fit instead of wrapping. */
+  columns?: number | undefined;
   git: Git;
   /** Token from the GitHub CLI session, or null when gh is missing or logged out. */
   ghToken: () => string | null;
@@ -171,13 +173,12 @@ export async function run(argv: string[], io: Io): Promise<number> {
       say(`No open pull requests in ${repo.owner}/${repo.repo}.`);
       return 0;
     }
-    const rows = [];
+    const rows: ListRow[] = [];
     for (const p of pulls.slice(0, limit)) {
       const e = evaluate(await readPullRequest(gh, { ...repo, number: p.number }));
       rows.push({ number: p.number, title: p.title, verdict: e.verdict, actors: actorsOf(e) });
-      if (!opt.json) say(`#${String(p.number).padEnd(6)} ${verdictWord(e.verdict, paint)}  ${actorsOf(e).padEnd(18)} ${clean(p.title).slice(0, 60)}`);
     }
-    if (opt.json) say(JSON.stringify(rows, null, 2));
+    say(opt.json ? JSON.stringify(rows, null, 2) : formatList(rows, paint, io.columns));
     return 0;
   } catch (err) {
     if (err instanceof TargetError || err instanceof GitHubError) {
@@ -196,6 +197,7 @@ if (invoked === realpathSync(import.meta.filename)) {
     err: (s) => console.error(s),
     env: process.env,
     isTty: process.stdout.isTTY === true,
+    columns: process.stdout.columns,
     git: realGit,
     ghToken: realGhToken,
   });

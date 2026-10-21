@@ -58,7 +58,32 @@ export function describeRequirement(r: Requirement): string {
   }
 }
 
-/** Who has to act, summarised for one line of `protocol list`. */
+export interface ListRow {
+  number: number;
+  title: string;
+  verdict: Verdict;
+  actors: string;
+}
+
+/**
+ * One line per pull request. Columns are as wide as their longest value, and the title is cut
+ * with "…" to fit the terminal, so a line never wraps. Without a known width nothing is cut.
+ */
+export function formatList(rows: ListRow[], paint: Paint, columns?: number): string {
+  const numW = Math.max(...rows.map((r) => String(r.number).length)) + 1;
+  const actW = Math.max(...rows.map((r) => r.actors.length));
+  const fixed = numW + 2 + 7 + 2 + actW + 2;
+  const room = columns && columns > fixed + 10 ? columns - fixed - 1 : Infinity;
+  return rows
+    .map((r) => {
+      const title = clean(r.title);
+      const cut = title.length > room ? `${title.slice(0, room - 1)}…` : title;
+      return `${`#${r.number}`.padEnd(numW)}  ${verdictWord(r.verdict, paint)}  ${r.actors.padEnd(actW)}  ${cut}`;
+    })
+    .join("\n");
+}
+
+/** Who has to act, summarised for one line of `prot list`. */
 export function actorsOf(e: Evaluation): string {
   const kinds = new Set<string>();
   for (const r of e.results) if (r.status !== "met" && r.actor.kind !== "nobody") kinds.add(r.actor.kind);

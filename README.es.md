@@ -88,10 +88,10 @@ situación. El programa escribe en inglés.
 
 ```console
 $ prot list -R bbenedev/protocol-sandbox
-#3      WAITING  ci                 Stale: green on an older commit
-#4      BLOCKED  author             Draft: not ready for review
-#2      BLOCKED  author             Failing: the required check is red
-#1      READY    —                  Passing: the required check is green
+#3  WAITING  ci      Stale: green on an older commit
+#4  BLOCKED  author  Draft: not ready for review
+#2  BLOCKED  author  Failing: the required check is red
+#1  READY    —       Passing: the required check is green
 ```
 
 **Un check que falla:** bloqueado, actúa el autor, y el link lleva al registro.
