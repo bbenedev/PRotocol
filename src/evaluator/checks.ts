@@ -126,9 +126,7 @@ export function evaluateCheck(
   const extra =
     freshness === "old-base"
       ? ` It ran against an older base (${short(latest.baseSha ?? "")}); GitHub accepts it, but the base has changed since.`
-      : freshness === "base-unknown"
-        ? " The provider does not say which base it tested against."
-        : "";
+      : ""; // an unknown base is reported once, in the evaluation notes
   return {
     id,
     label,
