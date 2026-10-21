@@ -40,10 +40,15 @@ export function renderEvaluation(e: Evaluation, title: string, paint: Paint): st
   return lines.join("\n");
 }
 
+// Rules only give an app id; name the one almost every repository uses.
+const KNOWN_APPS: Record<number, string> = { 15368: "GitHub Actions" };
+
 export function describeRequirement(r: Requirement): string {
   switch (r.kind) {
-    case "check":
-      return `check "${clean(r.context)}"${r.appId ? ` from app ${r.appId}` : ""}${r.strict ? ", branch must be up to date" : ""}`;
+    case "check": {
+      const app = r.appId ? ` from ${KNOWN_APPS[r.appId] ?? `app ${r.appId}`}` : "";
+      return `check "${clean(r.context)}"${app}${r.strict ? ", branch must be up to date" : ""}`;
+    }
     case "approvals":
       return `${r.count} approving review${r.count === 1 ? "" : "s"}${r.requireCurrentHead ? ", dismissed on new pushes" : ""}`;
     case "codeowners":
