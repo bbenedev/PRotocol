@@ -9,8 +9,9 @@
 
 **Saber por qué un pull request no se puede fusionar, y quién tiene que actuar.**
 
-Le pasás cualquier pull request. Lee de GitHub las reglas de la rama, los checks y las
-revisiones, y te dice en una pantalla qué falta, qué dejó de contar y a quién le toca moverse.
+Una herramienta de consola que lee de GitHub las reglas de la rama, los checks y las
+revisiones de un repositorio, y te dice en una pantalla qué falta, qué dejó de contar y a quién
+le toca moverse.
 
 [![ci](https://github.com/bbenedev/PRotocol/actions/workflows/ci.yml/badge.svg)](https://github.com/bbenedev/PRotocol/actions/workflows/ci.yml)
 ![licencia](https://img.shields.io/badge/license-Apache--2.0-blue)
@@ -18,7 +19,7 @@ revisiones, y te dice en una pantalla qué falta, qué dejó de contar y a quié
 ![typescript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![dependencias en ejecución](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
 
-[Empezar](#empezar) · [Ejemplos](#ejemplos) · [Qué detecta](#qué-detecta) · [Usarlo en CI](#usarlo-en-ci) · [Cómo funciona](#cómo-funciona) · [Hoja de ruta](#hoja-de-ruta)
+[Instalar](#instalar) · [Uso](#uso) · [Ejemplos](#ejemplos) · [Qué detecta](#qué-detecta) · [Scripts y CI](#scripts-y-ci) · [Cómo funciona](#cómo-funciona)
 
 [English](README.md) · **Español**
 
@@ -26,68 +27,105 @@ revisiones, y te dice en una pantalla qué falta, qué dejó de contar y a quié
 
 ---
 
-## Empezar
+## Instalar
 
 ```bash
-git clone https://github.com/bbenedev/PRotocol
-cd PRotocol
-npm install
-node src/cli.ts check palantir/policy-bot#1418
+npm install -g https://github.com/bbenedev/PRotocol/archive/refs/heads/main.tar.gz
+protocol --version
 ```
 
-Necesita Node.js 22.18 o más nuevo. Acepta `dueño/repo#número` o el link del pull request, y
-solo lee: nunca escribe en GitHub. Los repositorios públicos andan sin token; para los
-privados, o para tener más consultas por hora, pasá el tuyo:
+Necesita Node.js 22.18 o más nuevo. Los repositorios públicos andan sin token. Para los
+privados, o para tener más consultas por hora, exportá uno (con la CLI de GitHub es una línea):
 
 ```bash
-GITHUB_TOKEN=$(gh auth token) node src/cli.ts check https://github.com/dueño/repo/pull/123
+export GITHUB_TOKEN=$(gh auth token)
 ```
+
+## Uso
+
+```text
+protocol check [<pull-request>]   revisa un pull request
+protocol rules [<rama>]           muestra qué exige una rama antes de fusionar
+protocol list                     todos los pull requests abiertos con su veredicto
+```
+
+Como `gh`, deduce el repositorio de la carpeta en la que estás:
+
+```bash
+cd mi-proyecto
+protocol check 42          # el pull request 42 de este repositorio
+protocol check             # el pull request de la rama en la que estás
+protocol list              # todos los abiertos, y a quién le toca cada uno
+```
+
+O apuntalo a cualquier lado:
+
+```bash
+protocol check dueño/repo#42
+protocol check https://github.com/dueño/repo/pull/42
+protocol list -R dueño/repo
+```
+
+| Opción | |
+|---|---|
+| `-R, --repo dueño/repo` | usa este repositorio en vez del de la carpeta actual |
+| `-j, --json` | salida para otros programas |
+| `-q, --quiet` | no imprime nada; el código de salida es el veredicto |
+| `-n, --limit N` | cuántos pull requests evalúa `list` (por defecto 10) |
+| `--no-color` | salida sin colores (también con la variable `NO_COLOR`) |
+| `-h, --help` · `-V, --version` | |
+
+Solo lee. Nunca comenta, aprueba ni fusiona.
 
 ## Ejemplos
 
-Un pull request real de [palantir/policy-bot](https://github.com/palantir/policy-bot),
-revisado el 21/10/2026 (el programa escribe en inglés):
+Todas estas salidas son reales, de [bbenedev/protocol-sandbox](https://github.com/bbenedev/protocol-sandbox),
+un repositorio cuya rama `main` exige un check llamado `test`. Cada pull request muestra una
+situación. El programa escribe en inglés.
 
-```text
-$ node src/cli.ts check palantir/policy-bot#1418
-palantir/policy-bot#1418
-WAITING  head 1e48c59  base e31b05e
+**La vista de quien mantiene el repo:** todos los pull requests abiertos y a quién le toca.
 
-… Check "policy-bot: develop"  → ci
-  Not finished yet.
-  https://policy-bot.general.dmz.palantir.tech/details/palantir/policy-bot/1418
-… Check "docs/changelog"  → ci
-  Not finished yet.
-✔ Check "cla/palantir"
-  Passed on the current commit. The provider does not say which base it tested against.
-  https://cla.palantir.com/
-✔ Check "ci-all"
-  Passed on the current commit. The provider does not say which base it tested against.
-  https://github.com/palantir/policy-bot/actions/runs/38951971089/job/117146409219
-
-note: The base branch is protected. Review rules of classic branch protection are only visible to repository admins; if it uses them, they are not included.
-note: 2 passing check(s) do not say which base they tested against.
+```console
+$ protocol list -R bbenedev/protocol-sandbox
+#3      WAITING  ci                 Stale: green on an older commit
+#4      BLOCKED  author             Draft: not ready for review
+#2      BLOCKED  author             Failing: the required check is red
+#1      READY    —                  Passing: the required check is green
 ```
 
-Los cuatro checks son los que exige la rama `develop`. Dos terminaron y dos siguen esperando:
-el pull request está **esperando a la CI**, y el autor todavía no tiene nada que hacer.
+**Un check que falla:** bloqueado, actúa el autor, y el link lleva al registro.
 
-Cuando un check falla, la línea dice quién actúa y lleva al registro:
+```console
+$ protocol check -R bbenedev/protocol-sandbox 2
+bbenedev/protocol-sandbox#2
+BLOCKED  head 22d9fbe  base b5e9376
 
-```text
-✘ Check "ci/test"  → author
+✘ Check "test"  → author
   Finished with "failure" on the current commit. Open the log, fix it and push.
-  https://github.com/acme/app/actions/runs/1
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39560551678/job/119090491439
 ```
 
-Y cuando un resultado verde es de un push anterior, no cuenta:
+**Un check verde que ya no cuenta:** pasó, pero en el commit anterior. El último push no tiene
+resultado, así que el pull request no está listo, aunque en la página se vea una tilde verde.
 
-```text
-… Check "ci/test"  → ci
-  The latest result is for commit bbbbbbb, not the current head aaaaaaa. Waiting for a run on the current commit.
+```console
+$ protocol check -R bbenedev/protocol-sandbox 3
+bbenedev/protocol-sandbox#3
+WAITING  head 8b4d2c5  base b5e9376
+
+… Check "test"  → ci
+  The latest result is for commit cb20422, not the current head 8b4d2c5. Waiting for a run on the current commit.
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39560560886/job/119090521340
 ```
 
-<sub>Estos dos últimos bloques salen de las pruebas del proyecto, no de un repositorio real.</sub>
+**Qué exige una rama:**
+
+```console
+$ protocol rules -R bbenedev/protocol-sandbox
+bbenedev/protocol-sandbox: main
+
+• check "test" from GitHub Actions
+```
 
 ## Qué detecta
 
@@ -95,64 +133,74 @@ Y cuando un resultado verde es de un push anterior, no cuenta:
 |---|---|
 | Un check requerido pasó, pero sobre un **commit anterior** | No cuenta; espera una ejecución sobre el commit actual |
 | Un check con el nombre correcto, publicado por **otra app** | No cuenta, y nombra la app que lo publicó |
-| Un check requerido que **nunca informó** | Falta, nunca verde; le avisa a quien mantiene que revise cuándo corre el workflow |
+| Un check requerido que **nunca informó** | Falta, nunca verde; quien mantiene el repo debería revisar cuándo corre el workflow |
 | Una aprobación **descartada** por un push nuevo, o de alguien **sin acceso de escritura** | No cuenta, y dice por qué |
-| **Cambios pedidos** | Bloqueado, y quien actúa es el autor |
+| **Cambios pedidos** | Bloqueado; actúa el autor |
 | Un **borrador** o un **conflicto** | Bloqueado, con qué hacer |
-| Datos que GitHub **no muestra** (reglas que solo ve un administrador, dueños del código) | Lo dice, en vez de hacer como que está todo bien |
+| Reglas que GitHub **no te muestra** (protección clásica sin ser administrador, dueños del código) | Lo dice, en vez de hacer como que está todo bien |
 
 Cada punto pendiente dice **quién actúa**: el autor, un revisor, la CI o quien mantiene el repo.
 
-## Usarlo en CI
+## Scripts y CI
 
-El código de salida es el veredicto, así que un script puede esperar a un pull request o
-fallar según el resultado:
+El código de salida de `protocol check` es el veredicto:
 
 | Código | Veredicto |
 |---|---|
 | `0` | listo |
 | `1` | bloqueado |
 | `2` | esperando |
-| `3` | desconocido (GitHub no dio todo lo necesario) |
+| `3` | desconocido, o no se pudo conectar con GitHub |
 | `64` | error de uso |
 
-`--json` imprime la evaluación completa, con cada requisito, su evidencia y sus links.
+```bash
+protocol check -q 42 && echo "listo para fusionar"
+protocol check --json 42 | jq '.results[] | select(.status != "met")'
+```
 
 ## Cómo funciona
 
 ```mermaid
 flowchart LR
-  CLI[cli.ts] --> READ[github/read.ts<br/>solo consultas de lectura]
+  CLI[cli/<br/>argumentos, salida] --> READ[github/<br/>solo consultas de lectura]
   READ --> API[API REST de GitHub]
   READ --> EV[evaluator/<br/>reglas puras, sin red]
   EV --> OUT[veredicto + quién actúa]
 ```
 
-- **Las reglas viven en un evaluador puro.** Recibe datos y devuelve un veredicto; una prueba
+- **Las reglas viven en un evaluador puro.** Recibe datos y devuelve un veredicto. Una prueba
   hace fallar el build si alguien le agrega un import de fuera de su carpeta.
 - **Lo desconocido nunca se vuelve verde.** La evidencia que falta, un acceso de escritura
   desconocido o reglas que no se pueden leer nunca ayudan a que un pull request parezca listo.
 - **El texto de los repositorios no es confiable.** Los nombres de checks y de usuarios se
-  limpian antes de llegar a tu terminal o al resumen de un check en GitHub.
-- **Cero dependencias en ejecución.** Usa el `fetch` y el sistema de pruebas que trae Node.
+  limpian antes de llegar a tu terminal, para que no puedan mandarle secuencias de control.
+- **Los cortes de red se reintentan** dos veces y después se informan en una línea, nunca con
+  un volcado de error.
+- **Cero dependencias en ejecución.** Usa el `fetch`, el lector de argumentos y el sistema de
+  pruebas que trae Node.
+
+### Desarrollo
 
 ```bash
-npm run check    # revisión estricta de tipos + 60 pruebas, sin red
+git clone https://github.com/bbenedev/PRotocol && cd PRotocol
+npm install
+npm run check                     # revisión estricta de tipos + 81 pruebas, sin red
+npm run build                     # compila a dist/ (la CI falla si dist/ quedó desactualizado)
+node dist/cli/main.js --help
 ```
 
 ## Hoja de ruta
 
 - [x] Evaluador: checks, revisiones, dueños del código, frescura, veredicto
-- [x] Línea de comandos: revisar cualquier pull request desde la terminal
+- [x] Comando `protocol`: `check`, `rules`, `list`
 - [ ] GitHub App: el mismo veredicto como un check en cada pull request, actualizado en cada push
-- [ ] Bot de Discord opcional para quien mantiene: `/protocol status` y cambios de veredicto
+- [ ] Bot de Discord opcional para quien mantiene el repo
 - [ ] Leer las reglas de dueños del código del repositorio
 
 No está planeado: fusionar, fusión automática ni un lenguaje de políticas propio.
 [policy-bot](https://github.com/palantir/policy-bot) y [Kodiak](https://github.com/chdsbd/kodiak)
-ya lo hacen bien; PRotocol explica, no exige.
-
-La investigación y las notas de diseño detrás de estas decisiones están en [`docs/`](docs/).
+ya lo hacen bien; PRotocol explica, no exige. La investigación y las notas de diseño detrás de
+estas decisiones están en [`docs/`](docs/).
 
 ## Licencia
 
