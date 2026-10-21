@@ -1,0 +1,12 @@
+{
+  // Compiles src/ to dist/ for the installed `protocol` command. Node does not strip types
+  // from files inside node_modules, so an installed copy needs plain JavaScript.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

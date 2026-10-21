@@ -20,4 +20,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: node dist/cli/main.js --version
       - run: npm audit --audit-level=moderate
