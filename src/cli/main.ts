@@ -10,6 +10,7 @@ import type { Verdict } from "../evaluator/types.ts";
 import { createClient, GitHubError, type GitHubClient } from "../github/api.ts";
 import { defaultBranch, openPulls, pullForBranch, readBranchRules, readPullRequest } from "../github/read.ts";
 import { actorsOf, ansi, clean, describeRequirement, formatList, plain, renderEvaluation, type ListRow, type Paint } from "./render.ts";
+import { noSpinner, startSpinner, type Spinner } from "./spinner.ts";
 import { realGit, resolvePullTarget, resolveRepo, TargetError, type Git } from "./target.ts";
 
 // Exit codes follow the verdict, so scripts and CI can use `protocol check` directly.
@@ -32,7 +33,8 @@ Usage:
   (nothing)                             the open pull request of the current branch
 
 Options:
-  -R, --repo <owner/repo>   use this repository instead of the current directory's
+  -r, --repo <owner/repo>   use this repository instead of the current directory's
+                            (-R also works, as in gh)
   -j, --json                print machine-readable JSON
   -q, --quiet               print nothing; the exit code is the verdict
   -n, --limit <n>           how many pull requests 'list' evaluates (default 10)
@@ -60,6 +62,8 @@ interface Io {
   git: Git;
   /** Token from the GitHub CLI session, or null when gh is missing or logged out. */
   ghToken: () => string | null;
+  /** Starts a progress indicator; absent when stderr is not an interactive terminal. */
+  progress?: ((text: string) => Spinner) | undefined;
   client?: GitHubClient;
 }
 
@@ -86,10 +90,11 @@ export async function run(argv: string[], io: Io): Promise<number> {
   let parsed;
   try {
     parsed = parseArgs({
-      args: argv,
+      // -R is accepted too, because that is the flag gh uses for the same thing.
+      args: argv.map((a) => (a.startsWith("-R") ? `-r${a.slice(2)}` : a)),
       allowPositionals: true,
       options: {
-        repo: { type: "string", short: "R" },
+        repo: { type: "string", short: "r" },
         json: { type: "boolean", short: "j" },
         quiet: { type: "boolean", short: "q" },
         limit: { type: "string", short: "n" },
@@ -121,22 +126,35 @@ export async function run(argv: string[], io: Io): Promise<number> {
   const paint: Paint = io.isTty && !opt["no-color"] && !io.env.NO_COLOR ? ansi : plain;
   const token = io.client ? undefined : findToken(io.env, io.ghToken);
   const gh = io.client ?? createClient(token);
+  let spin: Spinner = noSpinner;
+  const working = (text: string) => {
+    if (spin !== noSpinner) spin.update(text);
+    else if (!opt.quiet && !opt.json && io.progress) spin = io.progress(text);
+  };
+  const done = () => {
+    spin.stop();
+    spin = noSpinner;
+  };
   const say = (s: string) => {
+    done();
     if (!opt.quiet) io.out(s);
   };
 
   try {
     if (command === "check") {
       const target = resolvePullTarget(arg, opt.repo, io.git);
+      working(target.kind === "pull" ? `Checking ${target.ref.owner}/${target.ref.repo}#${target.ref.number}…` : `Looking for the pull request of '${target.branch}'…`);
       let ref;
       if (target.kind === "pull") ref = target.ref;
       else {
         const n = await pullForBranch(gh, target.repo.owner, target.repo.repo, target.branch);
         if (n === null) {
+          done();
           io.err(`prot: no open pull request for branch '${target.branch}' in ${target.repo.owner}/${target.repo.repo}.`);
           return EXIT.unknown;
         }
         ref = { ...target.repo, number: n };
+        working(`Checking ${ref.owner}/${ref.repo}#${ref.number}…`);
       }
       const evaluation = evaluate(await readPullRequest(gh, ref));
       say(opt.json ? JSON.stringify(evaluation, null, 2) : renderEvaluation(evaluation, `${ref.owner}/${ref.repo}#${ref.number}`, paint));
@@ -146,6 +164,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
     const repo = resolveRepo(opt.repo, io.git);
 
     if (command === "rules") {
+      working(`Reading the rules of ${repo.owner}/${repo.repo}…`);
       const branch = arg ?? (await defaultBranch(gh, repo.owner, repo.repo));
       const rules = await readBranchRules(gh, repo.owner, repo.repo, branch);
       if (opt.json) {
@@ -168,19 +187,23 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return EXIT_USAGE;
     }
     if (!io.client && !token) io.err(paint(90, "note: not logged in to GitHub (no GITHUB_TOKEN, no gh session): 60 requests per hour; 'list' may run out."));
+    working(`Listing open pull requests in ${repo.owner}/${repo.repo}…`);
     const pulls = await openPulls(gh, repo.owner, repo.repo, limit);
     if (pulls.length === 0) {
       say(`No open pull requests in ${repo.owner}/${repo.repo}.`);
       return 0;
     }
     const rows: ListRow[] = [];
-    for (const p of pulls.slice(0, limit)) {
+    const todo = pulls.slice(0, limit);
+    for (const [i, p] of todo.entries()) {
+      working(`Checking pull requests ${i + 1}/${todo.length}…`);
       const e = evaluate(await readPullRequest(gh, { ...repo, number: p.number }));
       rows.push({ number: p.number, title: p.title, verdict: e.verdict, actors: actorsOf(e) });
     }
     say(opt.json ? JSON.stringify(rows, null, 2) : formatList(rows, paint, io.columns));
     return 0;
   } catch (err) {
+    done();
     if (err instanceof TargetError || err instanceof GitHubError) {
       io.err(`prot: ${err.message}`);
       return err instanceof TargetError ? EXIT_USAGE : EXIT.unknown;
@@ -200,5 +223,6 @@ if (invoked === realpathSync(import.meta.filename)) {
     columns: process.stdout.columns,
     git: realGit,
     ghToken: realGhToken,
+    progress: process.stderr.isTTY ? (text) => startSpinner((s) => process.stderr.write(s), text) : undefined,
   });
 }

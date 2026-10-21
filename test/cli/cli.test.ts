@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EXIT, EXIT_USAGE, findToken, run } from "../../src/cli/main.ts";
 import { clean, formatList, plain } from "../../src/cli/render.ts";
+import { startSpinner, type Spinner } from "../../src/cli/spinner.ts";
 import { repoFromRemote, resolvePullTarget, type Git } from "../../src/cli/target.ts";
 import type { GitHubClient } from "../../src/github/api.ts";
 
@@ -98,6 +99,57 @@ const io = (c: ReturnType<typeof capture>, gh: GitHubClient, git: Git = gitIn("g
   git,
   ghToken: () => null,
   client: gh,
+});
+
+test("-r chooses the repository, and -R works too, as in gh", async () => {
+  const noRepo = gitIn(null);
+  for (const flag of ["-r", "-R"]) {
+    const c = capture();
+    assert.equal(await run(["check", flag, "acme/app", "7"], io(c, client("success"), noRepo)), EXIT.ready, flag);
+  }
+  assert.equal(await run(["check", "-Racme/app", "7"], io(capture(), client("success"), noRepo)), EXIT.ready);
+});
+
+function recordingProgress() {
+  const events: string[] = [];
+  const progress = (text: string): Spinner => {
+    events.push(`start ${text}`);
+    return { update: (t) => events.push(`update ${t}`), stop: () => events.push("stop") };
+  };
+  return { events, progress };
+}
+
+test("the progress indicator says what it is doing and stops before the result is printed", async () => {
+  const c = capture();
+  const { events, progress } = recordingProgress();
+  const order: string[] = [];
+  await run(["check", "7"], {
+    ...io(c, client("success")),
+    out: (s: string) => order.push(`out after ${events.length} events, last: ${events.at(-1)}`),
+    progress,
+  });
+  assert.equal(events[0], "start Checking acme/app#7…");
+  assert.equal(events.at(-1), "stop");
+  assert.match(order[0] ?? "", /last: stop/);
+});
+
+test("--json and --quiet never show the progress indicator", async () => {
+  for (const flag of ["--json", "-q"]) {
+    const { events, progress } = recordingProgress();
+    await run(["check", flag, "7"], { ...io(capture(), client("success")), progress });
+    assert.deepEqual(events, [], flag);
+  }
+});
+
+test("the spinner draws on one line and erases itself", () => {
+  let screen = "";
+  const s = startSpinner((t) => (screen += t), "Working…", 1_000_000);
+  s.update("Still working…");
+  s.stop();
+  s.stop();
+  assert.ok(screen.startsWith("\r⠋ Working…"));
+  assert.ok(screen.endsWith(`\r${" ".repeat("⠋ Working…".length)}\r`));
+  assert.equal(screen.split("\r").length, 4, "drawn once, erased once, stop twice draws nothing more");
 });
 
 test("the token comes from GITHUB_TOKEN, then GH_TOKEN, then the gh session", () => {

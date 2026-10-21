@@ -66,12 +66,12 @@ O apuntalo a cualquier lado:
 ```bash
 prot check dueño/repo#42
 prot check https://github.com/dueño/repo/pull/42
-prot list -R dueño/repo
+prot list -r dueño/repo
 ```
 
 | Opción | |
 |---|---|
-| `-R, --repo dueño/repo` | usa este repositorio en vez del de la carpeta actual |
+| `-r, --repo dueño/repo` | usa este repositorio en vez del de la carpeta actual (`-R` también anda, como en `gh`) |
 | `-j, --json` | salida para otros programas |
 | `-q, --quiet` | no imprime nada; el código de salida es el veredicto |
 | `-n, --limit N` | cuántos pull requests evalúa `list` (por defecto 10) |
@@ -89,7 +89,7 @@ situación. El programa escribe en inglés.
 **La vista de quien mantiene el repo:** todos los pull requests abiertos y a quién le toca.
 
 ```console
-$ prot list -R bbenedev/protocol-sandbox
+$ prot list -r bbenedev/protocol-sandbox
 #3  WAITING  ci      Stale: green on an older commit
 #4  BLOCKED  author  Draft: not ready for review
 #2  BLOCKED  author  Failing: the required check is red
@@ -99,7 +99,7 @@ $ prot list -R bbenedev/protocol-sandbox
 **Un check que falla:** bloqueado, actúa el autor, y el link lleva al registro.
 
 ```console
-$ prot check -R bbenedev/protocol-sandbox 2
+$ prot check -r bbenedev/protocol-sandbox 2
 bbenedev/protocol-sandbox#2
 BLOCKED  head 22d9fbe  base b5e9376
 
@@ -112,7 +112,7 @@ BLOCKED  head 22d9fbe  base b5e9376
 resultado, así que el pull request no está listo, aunque en la página se vea una tilde verde.
 
 ```console
-$ prot check -R bbenedev/protocol-sandbox 3
+$ prot check -r bbenedev/protocol-sandbox 3
 bbenedev/protocol-sandbox#3
 WAITING  head 8b4d2c5  base b5e9376
 
@@ -124,7 +124,7 @@ WAITING  head 8b4d2c5  base b5e9376
 **Qué exige una rama:**
 
 ```console
-$ prot rules -R bbenedev/protocol-sandbox
+$ prot rules -r bbenedev/protocol-sandbox
 bbenedev/protocol-sandbox: main
 
 • check "test" from GitHub Actions

@@ -65,12 +65,12 @@ Or point it anywhere:
 ```bash
 prot check owner/repo#42
 prot check https://github.com/owner/repo/pull/42
-prot list -R owner/repo
+prot list -r owner/repo
 ```
 
 | Option | |
 |---|---|
-| `-R, --repo owner/repo` | use this repository instead of the current folder's |
+| `-r, --repo owner/repo` | use this repository instead of the current folder's (`-R` also works, as in `gh`) |
 | `-j, --json` | machine-readable output |
 | `-q, --quiet` | print nothing; the exit code is the verdict |
 | `-n, --limit N` | how many pull requests `list` evaluates (default 10) |
@@ -88,7 +88,7 @@ shows one situation.
 **The maintainer's view:** every open pull request and whose move it is.
 
 ```console
-$ prot list -R bbenedev/protocol-sandbox
+$ prot list -r bbenedev/protocol-sandbox
 #3  WAITING  ci      Stale: green on an older commit
 #4  BLOCKED  author  Draft: not ready for review
 #2  BLOCKED  author  Failing: the required check is red
@@ -98,7 +98,7 @@ $ prot list -R bbenedev/protocol-sandbox
 **A failing check:** blocked, the author has to act, and the link goes to the log.
 
 ```console
-$ prot check -R bbenedev/protocol-sandbox 2
+$ prot check -r bbenedev/protocol-sandbox 2
 bbenedev/protocol-sandbox#2
 BLOCKED  head 22d9fbe  base b5e9376
 
@@ -111,7 +111,7 @@ BLOCKED  head 22d9fbe  base b5e9376
 push has no result, so the pull request is not ready, even though a green tick is on the page.
 
 ```console
-$ prot check -R bbenedev/protocol-sandbox 3
+$ prot check -r bbenedev/protocol-sandbox 3
 bbenedev/protocol-sandbox#3
 WAITING  head 8b4d2c5  base b5e9376
 
@@ -123,7 +123,7 @@ WAITING  head 8b4d2c5  base b5e9376
 **What a branch requires:**
 
 ```console
-$ prot rules -R bbenedev/protocol-sandbox
+$ prot rules -r bbenedev/protocol-sandbox
 bbenedev/protocol-sandbox: main
 
 • check "test" from GitHub Actions
