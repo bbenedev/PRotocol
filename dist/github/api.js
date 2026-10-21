@@ -15,7 +15,15 @@ export function createClient(token, fetcher = fetch) {
     if (token)
         headers.Authorization = `Bearer ${token}`;
     async function request(path, soft) {
-        const res = await fetcher(`https://api.github.com${path}`, { headers });
+        let res;
+        try {
+            res = await fetcher(`https://api.github.com${path}`, { headers });
+        }
+        catch (err) {
+            // fetch rejects on network failures (no connection, DNS, timeout): say so plainly.
+            const cause = err.cause?.code;
+            throw new GitHubError(0, `Could not reach GitHub${cause ? ` (${cause})` : ""}. Check your connection and try again.`);
+        }
         if (res.ok)
             return (await res.json());
         if (soft && (res.status === 403 || res.status === 404) && res.headers.get("x-ratelimit-remaining") !== "0") {
