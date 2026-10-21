@@ -21,6 +21,8 @@ including the green checks that silently stopped counting.
 
 [Why](#why) · [What it shows](#what-it-shows) · [How it decides](#how-it-decides) · [Try it](#try-it) · [Roadmap](#roadmap) · [Design docs](#design-docs)
 
+**English** · [Español](README.es.md)
+
 </div>
 
 ---
