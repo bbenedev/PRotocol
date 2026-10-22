@@ -248,7 +248,14 @@ export async function pullForBranch(gh: GitHubClient, owner: string, repo: strin
   return found[0]?.number ?? null;
 }
 
-export async function readPullRequest(gh: GitHubClient, ref: PullRef): Promise<EvaluationInput> {
+/** Age of the head commit, from its committer date. Left out when the date is not in the list. */
+function headAge(commits: { sha: string; commit?: { committer?: { date?: string } | null } }[], head: string, now: Date) {
+  const date = commits.find((c) => c.sha === head)?.commit?.committer?.date;
+  const ms = date ? now.getTime() - Date.parse(date) : NaN;
+  return Number.isFinite(ms) ? { headAgeSeconds: Math.max(0, ms / 1000) } : {};
+}
+
+export async function readPullRequest(gh: GitHubClient, ref: PullRef, now: Date = new Date()): Promise<EvaluationInput> {
   const repo = `/repos/${ref.owner}/${ref.repo}`;
   const missingData: string[] = [];
   const notes: string[] = [];
@@ -256,7 +263,7 @@ export async function readPullRequest(gh: GitHubClient, ref: PullRef): Promise<E
   const pull = await gh.get<ApiPull>(`${repo}/pulls/${ref.number}`);
   const [branchRules, commits, reviews] = await Promise.all([
     readBranchRules(gh, ref.owner, ref.repo, pull.base.ref),
-    gh.get<{ sha: string }[]>(`${repo}/pulls/${ref.number}/commits?per_page=100`),
+    gh.get<{ sha: string; commit?: { committer?: { date?: string } | null } }[]>(`${repo}/pulls/${ref.number}/commits?per_page=100`),
     gh.get<ApiReview[]>(`${repo}/pulls/${ref.number}/reviews?per_page=100`),
   ]);
   const { requirements } = branchRules;
@@ -315,6 +322,7 @@ export async function readPullRequest(gh: GitHubClient, ref: PullRef): Promise<E
       baseRef: pull.base.ref,
       baseSha: pull.base.sha,
       mergeable: pull.mergeable,
+      ...headAge(commits, pull.head.sha, now),
     },
     requirements,
     checks,

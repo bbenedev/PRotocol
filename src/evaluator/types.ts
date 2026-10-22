@@ -15,6 +15,11 @@ export interface PullRequestState {
   baseSha: string;
   /** GitHub's own answer: null while GitHub is still computing it. */
   mergeable: boolean | null;
+  /**
+   * Seconds since the head commit was made, when known. Right after a push a check can have no
+   * result only because CI has not started yet.
+   */
+  headAgeSeconds?: number;
 }
 
 /** A requirement GitHub enforces on the base branch, as read from rulesets or branch protection. */

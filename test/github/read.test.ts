@@ -156,3 +156,11 @@ test("a reviewer with write permission is marked as such", async () => {
   );
   assert.equal(input.reviews[0]?.hasWriteAccess, true);
 });
+
+test("the head commit's age comes from its committer date", async () => {
+  const commits = { [`${R}/pulls/7/commits`]: [{ sha: OLD }, { sha: HEAD, commit: { committer: { date: "2026-10-21T10:00:00Z" } } }] };
+  const input = await readPullRequest(fake(routes(commits)), { owner: "acme", repo: "app", number: 7 }, new Date("2026-10-21T10:01:30Z"));
+  assert.equal(input.pr.headAgeSeconds, 90);
+  const unknown = await readPullRequest(fake(routes()), { owner: "acme", repo: "app", number: 7 });
+  assert.equal(unknown.pr.headAgeSeconds, undefined, "no date, no guess");
+});

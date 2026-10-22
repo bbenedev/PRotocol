@@ -95,3 +95,21 @@ test("uses the current head and base of the pull request", () => {
   const r = evaluateCheck(required, [check({ commitSha: HEAD, baseSha: BASE })], pr());
   assert.equal(r.freshness, "current");
 });
+
+test("right after a push, no result yet is CI's move, not the maintainer's", () => {
+  const r = evaluateCheck(required, [], pr({ headAgeSeconds: 40 }));
+  assert.equal(r.status, "missing", "still not met, so the verdict cannot turn green");
+  assert.equal(r.actor.kind, "ci");
+  assert.match(r.explanation, /40s old/);
+});
+
+test("other checks still running on the head also mean CI is on its way", () => {
+  const r = evaluateCheck(required, [check({ name: "lint", status: "in_progress" })], pr());
+  assert.equal(r.status, "missing");
+  assert.equal(r.actor.kind, "ci");
+});
+
+test("an old head with no result still points at the workflow setup", () => {
+  const r = evaluateCheck(required, [], pr({ headAgeSeconds: 3600 }));
+  assert.equal(r.actor.kind, "maintainer");
+});

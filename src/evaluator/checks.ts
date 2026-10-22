@@ -5,7 +5,15 @@ type CheckRequirement = Extract<Requirement, { kind: "check" }>;
 // GitHub treats these as passing for a required check.
 const PASSING = new Set(["success", "neutral", "skipped"]);
 
+// A head commit younger than this with no results is more likely CI starting up than a
+// workflow that never runs.
+const FRESH_HEAD_SECONDS = 10 * 60;
+
 const short = (sha: string) => sha.slice(0, 7);
+
+function age(seconds: number): string {
+  return seconds < 60 ? `${Math.max(0, Math.round(seconds))}s` : `${Math.round(seconds / 60)} min`;
+}
 
 function newestFirst(a: CheckEvidence, b: CheckEvidence): number {
   return b.startedAt.localeCompare(a.startedAt);
@@ -39,6 +47,21 @@ export function evaluateCheck(
           `A check with this name exists, but it was published by ${apps.join(", ")}, ` +
           `not by the app the branch rules require. It does not count.`,
         evidenceUrls: named.flatMap((c) => (c.url ? [c.url] : [])),
+      };
+    }
+    // Still missing either way, so the verdict cannot turn green; only who acts changes.
+    const running = checks.some((c) => c.commitSha === pr.headSha && c.status !== "completed");
+    const fresh = pr.headAgeSeconds !== undefined && pr.headAgeSeconds < FRESH_HEAD_SECONDS;
+    if (running || fresh) {
+      return {
+        id,
+        label,
+        status: "missing",
+        actor: { kind: "ci" },
+        explanation: running
+          ? "Not reported yet. Other checks on this commit are still running, so it may start soon."
+          : `Not reported yet. The latest commit is ${age(pr.headAgeSeconds ?? 0)} old, so CI may still be starting.`,
+        evidenceUrls: [],
       };
     }
     return {

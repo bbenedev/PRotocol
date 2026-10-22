@@ -142,7 +142,13 @@ export async function pullForBranch(gh, owner, repo, branch) {
     const found = await gh.get(`/repos/${owner}/${repo}/pulls?state=open&head=${head}&per_page=1`);
     return found[0]?.number ?? null;
 }
-export async function readPullRequest(gh, ref) {
+/** Age of the head commit, from its committer date. Left out when the date is not in the list. */
+function headAge(commits, head, now) {
+    const date = commits.find((c) => c.sha === head)?.commit?.committer?.date;
+    const ms = date ? now.getTime() - Date.parse(date) : NaN;
+    return Number.isFinite(ms) ? { headAgeSeconds: Math.max(0, ms / 1000) } : {};
+}
+export async function readPullRequest(gh, ref, now = new Date()) {
     const repo = `/repos/${ref.owner}/${ref.repo}`;
     const missingData = [];
     const notes = [];
@@ -202,6 +208,7 @@ export async function readPullRequest(gh, ref) {
             baseRef: pull.base.ref,
             baseSha: pull.base.sha,
             mergeable: pull.mergeable,
+            ...headAge(commits, pull.head.sha, now),
         },
         requirements,
         checks,
