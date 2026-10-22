@@ -19,7 +19,7 @@ le toca moverse.
 ![typescript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![dependencias en ejecución](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
 
-[Instalar](#instalar) · [Uso](#uso) · [Ejemplos](#ejemplos) · [Qué detecta](#qué-detecta) · [Scripts y CI](#scripts-y-ci) · [Cómo funciona](#cómo-funciona)
+[Instalar](#instalar) · [Uso](#uso) · [Ejemplos](#ejemplos) · [Qué detecta](#qué-detecta) · [Scripts y CI](#scripts-y-ci) · [GitHub Action](#github-action) · [Cómo funciona](#cómo-funciona)
 
 [English](README.md) · **Español**
 
@@ -143,6 +143,7 @@ bbenedev/protocol-sandbox: main
 | Un check requerido pasó, pero sobre un **commit anterior** | No cuenta; espera una ejecución sobre el commit actual |
 | Un check con el nombre correcto, publicado por **otra app** | No cuenta, y nombra la app que lo publicó |
 | Un check requerido que **nunca informó** | Falta, nunca verde; quien mantiene el repo debería revisar cuándo corre el workflow |
+| Un check requerido sin resultado **justo después de un push** | Falta, nunca verde, pero le toca a la CI: probablemente todavía está arrancando |
 | Una aprobación **descartada** por un push nuevo, o de alguien **sin acceso de escritura** | No cuenta, y dice por qué |
 | **Cambios pedidos** | Bloqueado; actúa el autor |
 | Un **borrador** o un **conflicto** | Bloqueado, con qué hacer |
@@ -208,13 +209,45 @@ prot check --json 42 | jq '.results[] | select(.status != "met")'
 
 `--markdown` imprime el mismo veredicto como una tabla que GitHub muestra con formato. El texto
 de los repositorios se escapa, así que un nombre de check o un título no pueden romper la tabla
-ni mencionar a nadie. En un workflow puede llenar el resumen del job:
+ni mencionar a nadie.
+
+### GitHub Action
+
+El mismo veredicto en el resumen de una ejecución de workflow, sin instalar nada:
 
 ```yaml
-- run: npm install -g https://github.com/bbenedev/PRotocol/archive/refs/tags/v0.5.0.tar.gz
-- run: prot list -r "${{ github.repository }}" --markdown >> "$GITHUB_STEP_SUMMARY"
-  env:
-    GH_TOKEN: ${{ github.token }}
+on: pull_request
+
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: bbenedev/PRotocol@v0.6.0
+```
+
+| Entrada | Por defecto | |
+|---|---|---|
+| `command` | `check` | `check` para el pull request que disparó la ejecución, `list` para todos los abiertos |
+| `pull-request` | el que la disparó | número de pull request para `check` |
+| `repo` | este repositorio | `dueño/repo` a leer |
+| `token` | `github.token` | alcanza con acceso de lectura |
+| `fail-if-not-ready` | `false` | hace fallar el paso si el veredicto no es listo |
+
+La salida `verdict` (`ready`, `blocked`, `pending`, `unknown`) permite que los pasos siguientes
+decidan. Una ejecución dentro de los checks del propio pull request se ve a sí misma sin
+terminar, así que ahí `check` suele decir esperando; `list` programado le da a quien mantiene el
+repo un tablero diario:
+
+```yaml
+on:
+  schedule: [{ cron: "0 9 * * 1-5" }]
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: bbenedev/PRotocol@v0.6.0
+        with:
+          command: list
 ```
 
 ## Cómo funciona
@@ -243,7 +276,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbenedev/PRotocol && cd PRotocol
 npm install
-npm run check                     # revisión estricta de tipos + 95 pruebas, sin red
+npm run check                     # revisión estricta de tipos + 100 pruebas, sin red
 npm run build                     # compila a dist/ (la CI falla si dist/ quedó desactualizado)
 node dist/cli/main.js --help
 ```
@@ -253,6 +286,7 @@ node dist/cli/main.js --help
 - [x] Evaluador: checks, revisiones, dueños del código, frescura, veredicto
 - [x] Comando `protocol`: `check`, `rules`, `list`
 - [x] `--watch`, `list --me` y salida en Markdown
+- [x] GitHub Action: el veredicto en el resumen del job
 - [ ] GitHub App: el mismo veredicto como un check en cada pull request, actualizado en cada push
 - [ ] Bot de Discord opcional para quien mantiene el repo
 - [ ] Leer las reglas de dueños del código del repositorio

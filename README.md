@@ -18,7 +18,7 @@ and tells you, in one screen, what is missing, what stopped counting, and whose 
 ![typescript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
 
-[Install](#install) · [Usage](#usage) · [Examples](#examples) · [What it catches](#what-it-catches) · [Scripts and CI](#scripts-and-ci) · [How it works](#how-it-works)
+[Install](#install) · [Usage](#usage) · [Examples](#examples) · [What it catches](#what-it-catches) · [Scripts and CI](#scripts-and-ci) · [GitHub Action](#github-action) · [How it works](#how-it-works)
 
 **English** · [Español](README.es.md)
 
@@ -179,6 +179,7 @@ bbenedev/protocol-sandbox: main
 | A required check passed, but on an **older commit** | Does not count; waiting for a run on the current commit |
 | A check with the right name, published by the **wrong app** | Does not count, and names the app that published it |
 | A required check that **never reported** | Missing, never green; the maintainer should check when the workflow runs |
+| A required check with no result **right after a push** | Missing, never green, but CI's move: it is probably still starting |
 | An approval **dismissed** by a new push, or from someone **without write access** | Does not count, and says why |
 | **Changes requested** | Blocked; the author acts |
 | A **draft** or a **merge conflict** | Blocked, with what to do |
@@ -204,14 +205,44 @@ prot check --json 42 | jq '.results[] | select(.status != "met")'
 ```
 
 `--markdown` prints the same verdict as a table that GitHub renders, with repository text
-escaped so a check name or a title cannot break the table or mention anyone. In a workflow it
-can fill the job summary:
+escaped so a check name or a title cannot break the table or mention anyone.
+
+### GitHub Action
+
+The same verdict in the summary of a workflow run, with nothing to install:
 
 ```yaml
-- run: npm install -g https://github.com/bbenedev/PRotocol/archive/refs/tags/v0.5.0.tar.gz
-- run: prot list -r "${{ github.repository }}" --markdown >> "$GITHUB_STEP_SUMMARY"
-  env:
-    GH_TOKEN: ${{ github.token }}
+on: pull_request
+
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: bbenedev/PRotocol@v0.6.0
+```
+
+| Input | Default | |
+|---|---|---|
+| `command` | `check` | `check` for the pull request that triggered the run, `list` for every open one |
+| `pull-request` | the triggering one | pull request number for `check` |
+| `repo` | this repository | `owner/repo` to read |
+| `token` | `github.token` | read access is enough |
+| `fail-if-not-ready` | `false` | fail the step unless the verdict is ready |
+
+The `verdict` output (`ready`, `blocked`, `pending`, `unknown`) lets later steps decide. A run
+inside the pull request's own checks sees itself as unfinished, so `check` there usually says
+waiting; `list` on a schedule gives maintainers a daily board:
+
+```yaml
+on:
+  schedule: [{ cron: "0 9 * * 1-5" }]
+jobs:
+  board:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: bbenedev/PRotocol@v0.6.0
+        with:
+          command: list
 ```
 
 ## How it works
@@ -238,7 +269,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbenedev/PRotocol && cd PRotocol
 npm install
-npm run check                     # strict type check + 95 tests, no network needed
+npm run check                     # strict type check + 100 tests, no network needed
 npm run build                     # compile to dist/ (CI fails if dist/ is out of date)
 node dist/cli/main.js --help
 ```
@@ -248,6 +279,7 @@ node dist/cli/main.js --help
 - [x] Evaluator: checks, reviews, code owners, freshness, verdict
 - [x] `protocol` command: `check`, `rules`, `list`
 - [x] `--watch`, `list --me` and Markdown output
+- [x] GitHub Action: the verdict in the job summary
 - [ ] GitHub App: the same verdict as a check on every pull request, updated on each push
 - [ ] Optional Discord bot for maintainers
 - [ ] Code owner rules read from the repository
