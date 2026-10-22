@@ -49,6 +49,8 @@ to 60 requests per hour.
 prot check [<pull-request>]   evaluate one pull request
 prot rules [<branch>]         show what a branch requires before merging
 prot list                     every open pull request with its verdict
+prot list --me                only the pull requests waiting on you
+prot check --watch            wait until CI finishes, printing each change
 ```
 
 Like `gh`, it works out the repository from the folder you are in:
@@ -73,6 +75,10 @@ prot list -r owner/repo
 | `-r, --repo owner/repo` | use this repository instead of the current folder's (`-R` also works, as in `gh`) |
 | `-j, --json` | machine-readable output |
 | `-q, --quiet` | print nothing; the exit code is the verdict |
+| `-m, --markdown` | Markdown output, for a CI job summary or a comment |
+| `-w, --watch` | `check`: look again until the verdict is no longer waiting; the exit code is the final verdict |
+| `--interval S` | seconds between looks with `--watch` (default 30, minimum 5) |
+| `--me` | `list`: only pull requests where you have something to do |
 | `-n, --limit N` | how many pull requests `list` evaluates (default 10) |
 | `--no-color` | plain output (also when `NO_COLOR` is set) |
 | `-h, --help` · `-V, --version` | |
@@ -120,6 +126,43 @@ WAITING  head 8b4d2c5  base b5e9376
   https://github.com/bbenedev/protocol-sandbox/actions/runs/39560560886/job/119090521340
 ```
 
+**Waiting for CI:** `--watch` looks again every few seconds, prints only what changed, and
+stops when the pull request is ready or blocked. Here a push has just been made:
+
+```console
+$ prot check -r bbenedev/protocol-sandbox 5 --watch --interval 5
+bbenedev/protocol-sandbox#5
+WAITING  head 93f49f5  base b5e9376
+
+? Check "test"  → maintainer
+  No result for this check has been reported on any commit of this pull request. Check that the workflow runs on pull requests and is not skipped by a path filter.
+
+[21:04:37] bbenedev/protocol-sandbox#5
+WAITING  head 93f49f5  base b5e9376
+
+… Check "test"  → ci
+  Not finished yet.
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39697434060/job/119558134666
+
+[21:04:43] bbenedev/protocol-sandbox#5
+READY  head 93f49f5  base b5e9376
+
+✔ Check "test"
+  Passed on the current commit.
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39697434060/job/119558134666
+```
+
+Chain it with anything: `prot check -w -q && notify-send "PR ready"`.
+
+**Your turn:** `--me` keeps only the pull requests where you are the one who has to act, as
+the author or as a requested reviewer.
+
+```console
+$ prot list -r bbenedev/protocol-sandbox --me
+#4  BLOCKED  author  Draft: not ready for review
+#2  BLOCKED  author  Failing: the required check is red
+```
+
 **What a branch requires:**
 
 ```console
@@ -160,6 +203,17 @@ prot check -q 42 && echo "ready to merge"
 prot check --json 42 | jq '.results[] | select(.status != "met")'
 ```
 
+`--markdown` prints the same verdict as a table that GitHub renders, with repository text
+escaped so a check name or a title cannot break the table or mention anyone. In a workflow it
+can fill the job summary:
+
+```yaml
+- run: npm install -g https://github.com/bbenedev/PRotocol/archive/refs/tags/v0.5.0.tar.gz
+- run: prot list -r "${{ github.repository }}" --markdown >> "$GITHUB_STEP_SUMMARY"
+  env:
+    GH_TOKEN: ${{ github.token }}
+```
+
 ## How it works
 
 ```mermaid
@@ -184,7 +238,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbenedev/PRotocol && cd PRotocol
 npm install
-npm run check                     # strict type check + 81 tests, no network needed
+npm run check                     # strict type check + 95 tests, no network needed
 npm run build                     # compile to dist/ (CI fails if dist/ is out of date)
 node dist/cli/main.js --help
 ```
@@ -193,6 +247,7 @@ node dist/cli/main.js --help
 
 - [x] Evaluator: checks, reviews, code owners, freshness, verdict
 - [x] `protocol` command: `check`, `rules`, `list`
+- [x] `--watch`, `list --me` and Markdown output
 - [ ] GitHub App: the same verdict as a check on every pull request, updated on each push
 - [ ] Optional Discord bot for maintainers
 - [ ] Code owner rules read from the repository
