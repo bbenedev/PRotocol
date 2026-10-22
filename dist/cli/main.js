@@ -6,19 +6,22 @@ import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { evaluate } from "../evaluator/evaluate.js";
 import { createClient, GitHubError } from "../github/api.js";
-import { defaultBranch, openPulls, pullForBranch, readBranchRules, readPullRequest } from "../github/read.js";
-import { actorsOf, ansi, clean, describeRequirement, formatList, plain, renderEvaluation } from "./render.js";
+import { defaultBranch, openPulls, pullForBranch, readBranchRules, readPullRequest, viewerLogin } from "../github/read.js";
+import { actorsOf, ansi, clean, describeRequirement, formatList, markdownEvaluation, markdownList, plain, renderEvaluation, waitsOn, } from "./render.js";
 import { noSpinner, startSpinner } from "./spinner.js";
 import { realGit, resolvePullTarget, resolveRepo, TargetError } from "./target.js";
 // Exit codes follow the verdict, so scripts and CI can use `protocol check` directly.
 export const EXIT = { ready: 0, blocked: 1, pending: 2, unknown: 3 };
 export const EXIT_USAGE = 64;
+const DEFAULT_INTERVAL_S = 30;
+const MIN_INTERVAL_S = 5;
 export const HELP = `protocol - explain why a pull request can or cannot be merged, and who has to act
 
 Usage:
   prot check [<pull-request>] [options]   evaluate one pull request
   prot rules [<branch>] [options]         show what a branch requires before merging
   prot list [options]                     every open pull request with its verdict
+  prot list --me                          only the pull requests waiting on you
 
   'prot' is the short name; 'protocol' runs the same command.
 
@@ -33,6 +36,11 @@ Options:
                             (-R also works, as in gh)
   -j, --json                print machine-readable JSON
   -q, --quiet               print nothing; the exit code is the verdict
+  -m, --markdown            print Markdown, for a CI job summary or a comment
+  -w, --watch               'check': look again until the verdict is no longer waiting,
+                            printing each change; the exit code is the final verdict
+      --interval <seconds>  time between looks with --watch (default 30, minimum 5)
+      --me                  'list': only pull requests where you have something to do
   -n, --limit <n>           how many pull requests 'list' evaluates (default 10)
       --no-color            plain output (also when NO_COLOR is set)
   -h, --help                show this help
@@ -76,6 +84,10 @@ export async function run(argv, io) {
                 json: { type: "boolean", short: "j" },
                 quiet: { type: "boolean", short: "q" },
                 limit: { type: "string", short: "n" },
+                markdown: { type: "boolean", short: "m" },
+                watch: { type: "boolean", short: "w" },
+                interval: { type: "string" },
+                me: { type: "boolean" },
                 "no-color": { type: "boolean" },
                 help: { type: "boolean", short: "h" },
                 version: { type: "boolean", short: "V" },
@@ -100,6 +112,26 @@ export async function run(argv, io) {
         io.err(`prot: unexpected '${extra[0] ?? (command === "list" ? arg : command)}'\nTry 'prot --help'.`);
         return EXIT_USAGE;
     }
+    const wrong = opt.json && opt.markdown
+        ? "--json and --markdown cannot be used together."
+        : opt.watch && command !== "check"
+            ? "--watch only works with 'check'."
+            : opt.interval !== undefined && !opt.watch
+                ? "--interval only works with --watch."
+                : opt.me && command !== "list"
+                    ? "--me only works with 'list'."
+                    : null;
+    if (wrong) {
+        io.err(`prot: ${wrong}\nTry 'prot --help'.`);
+        return EXIT_USAGE;
+    }
+    const interval = opt.interval === undefined ? DEFAULT_INTERVAL_S : Number(opt.interval);
+    if (!Number.isInteger(interval) || interval < MIN_INTERVAL_S || interval > 3600) {
+        io.err(`prot: --interval must be a whole number of seconds from ${MIN_INTERVAL_S} to 3600.`);
+        return EXIT_USAGE;
+    }
+    const sleep = io.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    const now = io.now ?? (() => new Date());
     const paint = io.isTty && !opt["no-color"] && !io.env.NO_COLOR ? ansi : plain;
     const token = io.client ? undefined : findToken(io.env, io.ghToken);
     const gh = io.client ?? createClient(token);
@@ -136,9 +168,33 @@ export async function run(argv, io) {
                 ref = { ...target.repo, number: n };
                 working(`Checking ${ref.owner}/${ref.repo}#${ref.number}…`);
             }
-            const evaluation = evaluate(await readPullRequest(gh, ref));
-            say(opt.json ? JSON.stringify(evaluation, null, 2) : renderEvaluation(evaluation, `${ref.owner}/${ref.repo}#${ref.number}`, paint));
-            return EXIT[evaluation.verdict];
+            const show = (e, compact) => opt.json
+                ? JSON.stringify(e, null, compact ? undefined : 2)
+                : opt.markdown
+                    ? markdownEvaluation(e, ref)
+                    : renderEvaluation(e, `${ref.owner}/${ref.repo}#${ref.number}`, paint);
+            let evaluation = evaluate(await readPullRequest(gh, ref));
+            if (!opt.watch) {
+                say(show(evaluation, false));
+                return EXIT[evaluation.verdict];
+            }
+            // --watch prints the first evaluation, then only what changed (one JSON object per line
+            // with --json), and stops as soon as the verdict is no longer "waiting".
+            let shown = "";
+            for (;;) {
+                const seen = signature(evaluation);
+                if (seen !== shown) {
+                    const stamp = shown === "" || opt.json || opt.markdown ? "" : `\n${paint(90, `[${now().toTimeString().slice(0, 8)}]`)} `;
+                    say(stamp + show(evaluation, true));
+                    shown = seen;
+                }
+                if (evaluation.verdict !== "pending")
+                    return EXIT[evaluation.verdict];
+                working(`Waiting for ${ref.owner}/${ref.repo}#${ref.number}: next look in ${interval}s (Ctrl+C to stop)…`);
+                await sleep(interval * 1000);
+                working(`Checking ${ref.owner}/${ref.repo}#${ref.number}…`);
+                evaluation = evaluate(await readPullRequest(gh, ref));
+            }
         }
         const repo = resolveRepo(opt.repo, io.git);
         if (command === "rules") {
@@ -165,6 +221,10 @@ export async function run(argv, io) {
             io.err("prot: --limit must be a whole number from 1 to 50.");
             return EXIT_USAGE;
         }
+        if (opt.me && !io.client && !token) {
+            io.err("prot: --me needs to know who you are: log in with 'gh auth login' or set GITHUB_TOKEN.");
+            return EXIT.unknown;
+        }
         if (!io.client && !token)
             io.err(paint(90, "note: not logged in to GitHub (no GITHUB_TOKEN, no gh session): 60 requests per hour; 'list' may run out."));
         working(`Listing open pull requests in ${repo.owner}/${repo.repo}…`);
@@ -173,14 +233,22 @@ export async function run(argv, io) {
             say(`No open pull requests in ${repo.owner}/${repo.repo}.`);
             return 0;
         }
+        const me = opt.me ? await viewerLogin(gh) : null;
         const rows = [];
         const todo = pulls.slice(0, limit);
         for (const [i, p] of todo.entries()) {
             working(`Checking pull requests ${i + 1}/${todo.length}…`);
             const e = evaluate(await readPullRequest(gh, { ...repo, number: p.number }));
+            const pull = { author: p.user?.login ?? "", requestedReviewers: (p.requested_reviewers ?? []).map((u) => u.login) };
+            if (me && !waitsOn(e, me, pull))
+                continue;
             rows.push({ number: p.number, title: p.title, verdict: e.verdict, actors: actorsOf(e) });
         }
-        say(opt.json ? JSON.stringify(rows, null, 2) : formatList(rows, paint, io.columns));
+        if (rows.length === 0) {
+            say(`Nothing is waiting on ${clean(me ?? "")} in ${repo.owner}/${repo.repo}.`);
+            return 0;
+        }
+        say(opt.json ? JSON.stringify(rows, null, 2) : opt.markdown ? markdownList(rows, repo) : formatList(rows, paint, io.columns));
         return 0;
     }
     catch (err) {
@@ -191,6 +259,10 @@ export async function run(argv, io) {
         }
         throw err;
     }
+}
+/** What --watch compares: a new line is printed only when one of these changes. */
+function signature(e) {
+    return [e.verdict, e.headSha, ...e.results.map((r) => `${r.id}=${r.status}`)].join(" ");
 }
 // Run only when executed as the program, not when imported by the tests.
 const invoked = process.argv[1] ? realpathSync(resolve(process.argv[1])) : "";

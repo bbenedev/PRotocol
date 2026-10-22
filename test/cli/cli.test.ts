@@ -70,15 +70,17 @@ function capture() {
   return { out, err, io: { out: (s: string) => out.push(s), err: (s: string) => err.push(s) } };
 }
 
-function client(checkConclusion: string): GitHubClient {
+function client(checkConclusion: string, viewer = "ana"): GitHubClient {
   const routes: [string, unknown][] = [
     ["/repos/acme/app/pulls/7/commits", [{ sha: HEAD }]],
     ["/repos/acme/app/pulls/7/reviews", []],
     ["/repos/acme/app/pulls/7", { state: "open", draft: false, mergeable: true, user: { login: "ana" }, head: { sha: HEAD }, base: { ref: "main", sha: BASE } }],
     ["/repos/acme/app/pulls?state=open&head=", [{ number: 7 }]],
+    ["/repos/acme/app/pulls?state=open&sort=", [{ number: 7, title: "Fix login", user: { login: "ana" }, requested_reviewers: [{ login: "bob" }] }]],
+    ["/user", { login: viewer }],
     ["/repos/acme/app/branches/main", { protected: false }],
     ["/repos/acme/app/rules/branches/main", [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "test" }] } }]],
-    [`/repos/acme/app/commits/${HEAD}/check-runs`, { check_runs: [{ id: 1, name: "test", head_sha: HEAD, status: "completed", conclusion: checkConclusion, started_at: "2026-10-21T10:00:00Z", html_url: null, app: null }] }],
+    [`/repos/acme/app/commits/${HEAD}/check-runs`, { check_runs: [{ id: 1, name: "test", head_sha: HEAD, status: checkConclusion === "in_progress" ? "in_progress" : "completed", conclusion: checkConclusion === "in_progress" ? null : checkConclusion, started_at: "2026-10-21T10:00:00Z", html_url: null, app: null }] }],
     [`/repos/acme/app/commits/${HEAD}/statuses`, []],
   ];
   const find = (p: string) => routes.find(([k]) => p.startsWith(k))?.[1];
@@ -199,4 +201,95 @@ test("rules lists what the branch requires", async () => {
   const c = capture();
   assert.equal(await run(["rules", "main"], io(c, client("success"))), 0);
   assert.match(c.out.join("\n"), /check "test"/);
+});
+
+/** A pull request whose check reports these results, one per look. */
+function sequence(...conclusions: string[]): GitHubClient & { looks: () => number } {
+  let looks = 0;
+  const pick = () => client(conclusions[Math.min(looks, conclusions.length - 1)] ?? "success");
+  return {
+    looks: () => looks,
+    get: async <T>(p: string) => {
+      const answer = await pick().get<T>(p);
+      if (p.includes("/check-runs")) looks++;
+      return answer;
+    },
+    tryGet: <T>(p: string) => pick().tryGet<T>(p),
+  };
+}
+
+test("--watch looks again until the verdict is no longer waiting, and prints only changes", async () => {
+  const c = capture();
+  const gh = sequence("in_progress", "in_progress", "success");
+  const waits: number[] = [];
+  const code = await run(["check", "--watch", "--interval", "10", "7"], {
+    ...io(c, gh),
+    sleep: async (ms: number) => void waits.push(ms),
+    now: () => new Date(2026, 9, 21, 14, 5, 9),
+  });
+  assert.equal(code, EXIT.ready);
+  assert.equal(gh.looks(), 3);
+  assert.deepEqual(waits, [10_000, 10_000]);
+  assert.equal(c.out.length, 2, "the second look changed nothing, so it printed nothing");
+  assert.match(c.out[0] ?? "", /^acme\/app#7\nWAITING/);
+  assert.match(c.out[1] ?? "", /^\n\[14:05:09\] acme\/app#7\nREADY/);
+});
+
+test("--watch stops at once when the pull request is not waiting", async () => {
+  const code = await run(["check", "-w", "7"], { ...io(capture(), sequence("failure")), sleep: async () => assert.fail("slept") });
+  assert.equal(code, EXIT.blocked);
+});
+
+test("--watch --json prints one evaluation per line", async () => {
+  const c = capture();
+  await run(["check", "-w", "-j", "7"], { ...io(c, sequence("in_progress", "success")), sleep: async () => {} });
+  assert.deepEqual(
+    c.out.map((l) => JSON.parse(l).verdict),
+    ["pending", "ready"],
+  );
+});
+
+test("options that do not fit the command are usage errors", async () => {
+  for (const args of [
+    ["list", "-w"],
+    ["check", "--interval", "10", "7"],
+    ["check", "-w", "--interval", "2", "7"],
+    ["check", "-j", "-m", "7"],
+    ["check", "--me", "7"],
+  ]) {
+    const c = capture();
+    assert.equal(await run(args, io(c, client("success"))), EXIT_USAGE, args.join(" "));
+    assert.match(c.err.join("\n"), /^prot: /, args.join(" "));
+  }
+});
+
+test("--markdown prints a linked title and the requirement table", async () => {
+  const c = capture();
+  assert.equal(await run(["check", "-m", "7"], io(c, client("failure"))), EXIT.blocked);
+  const md = c.out.join("\n");
+  assert.ok(md.startsWith("### [acme/app\\#7](https://github.com/acme/app/pull/7)"), md);
+  assert.match(md, /\| ❌ \| Check "test" \| author \|/);
+});
+
+test("list --markdown links each pull request and escapes its title", async () => {
+  const c = capture();
+  await run(["list", "-m"], io(c, client("success")));
+  assert.ok(c.out.join("\n").includes("| [#7](https://github.com/acme/app/pull/7) | ✅ Ready | — | Fix login |"));
+});
+
+test("list --me keeps only the pull requests where you have to act", async () => {
+  const author = capture();
+  await run(["list", "--me"], io(author, client("failure", "ana")));
+  assert.match(author.out.join("\n"), /#7\s+BLOCKED\s+author\s+Fix login/, "a red check is the author's move");
+
+  const reviewer = capture();
+  await run(["list", "--me"], io(reviewer, client("failure", "bob")));
+  assert.deepEqual(reviewer.out, ["Nothing is waiting on bob in acme/app."]);
+});
+
+test("list --me without a login says how to log in", async () => {
+  const c = capture();
+  const { client: _unused, ...offline } = io(c, client("success"));
+  assert.equal(await run(["list", "--me"], offline), EXIT.unknown);
+  assert.match(c.err.join("\n"), /gh auth login/);
 });
