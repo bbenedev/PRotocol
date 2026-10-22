@@ -50,6 +50,8 @@ por hora.
 prot check [<pull-request>]   revisa un pull request
 prot rules [<rama>]           muestra qué exige una rama antes de fusionar
 prot list                     todos los pull requests abiertos con su veredicto
+prot list --me                solo los pull requests que esperan algo de vos
+prot check --watch            espera a que termine la CI y muestra cada cambio
 ```
 
 Como `gh`, deduce el repositorio de la carpeta en la que estás:
@@ -74,6 +76,10 @@ prot list -r dueño/repo
 | `-r, --repo dueño/repo` | usa este repositorio en vez del de la carpeta actual (`-R` también anda, como en `gh`) |
 | `-j, --json` | salida para otros programas |
 | `-q, --quiet` | no imprime nada; el código de salida es el veredicto |
+| `-m, --markdown` | salida en Markdown, para el resumen de un job de CI o un comentario |
+| `-w, --watch` | `check`: vuelve a mirar hasta que el veredicto deja de ser "esperando"; el código de salida es el veredicto final |
+| `--interval S` | segundos entre cada vistazo con `--watch` (por defecto 30, mínimo 5) |
+| `--me` | `list`: solo los pull requests en los que te toca hacer algo |
 | `-n, --limit N` | cuántos pull requests evalúa `list` (por defecto 10) |
 | `--no-color` | salida sin colores (también con la variable `NO_COLOR`) |
 | `-h, --help` · `-V, --version` | |
@@ -144,6 +150,45 @@ bbenedev/protocol-sandbox: main
 
 Cada punto pendiente dice **quién actúa**: el autor, un revisor, la CI o quien mantiene el repo.
 
+## Esperar y filtrar
+
+**Esperar a la CI:** `--watch` vuelve a mirar cada tantos segundos, imprime solo lo que
+cambió y termina cuando el pull request está listo o bloqueado. Acá recién se hizo un push:
+
+```console
+$ prot check -r bbenedev/protocol-sandbox 5 --watch --interval 5
+bbenedev/protocol-sandbox#5
+WAITING  head 93f49f5  base b5e9376
+
+? Check "test"  → maintainer
+  No result for this check has been reported on any commit of this pull request. Check that the workflow runs on pull requests and is not skipped by a path filter.
+
+[21:04:37] bbenedev/protocol-sandbox#5
+WAITING  head 93f49f5  base b5e9376
+
+… Check "test"  → ci
+  Not finished yet.
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39697434060/job/119558134666
+
+[21:04:43] bbenedev/protocol-sandbox#5
+READY  head 93f49f5  base b5e9376
+
+✔ Check "test"
+  Passed on the current commit.
+  https://github.com/bbenedev/protocol-sandbox/actions/runs/39697434060/job/119558134666
+```
+
+Se puede encadenar con cualquier cosa: `prot check -w -q && notify-send "PR listo"`.
+
+**Te toca a vos:** `--me` deja solo los pull requests en los que sos quien tiene que actuar,
+como autor o como revisor pedido.
+
+```console
+$ prot list -r bbenedev/protocol-sandbox --me
+#4  BLOCKED  author  Draft: not ready for review
+#2  BLOCKED  author  Failing: the required check is red
+```
+
 ## Scripts y CI
 
 El código de salida de `prot check` es el veredicto:
@@ -159,6 +204,17 @@ El código de salida de `prot check` es el veredicto:
 ```bash
 prot check -q 42 && echo "listo para fusionar"
 prot check --json 42 | jq '.results[] | select(.status != "met")'
+```
+
+`--markdown` imprime el mismo veredicto como una tabla que GitHub muestra con formato. El texto
+de los repositorios se escapa, así que un nombre de check o un título no pueden romper la tabla
+ni mencionar a nadie. En un workflow puede llenar el resumen del job:
+
+```yaml
+- run: npm install -g https://github.com/bbenedev/PRotocol/archive/refs/tags/v0.5.0.tar.gz
+- run: prot list -r "${{ github.repository }}" --markdown >> "$GITHUB_STEP_SUMMARY"
+  env:
+    GH_TOKEN: ${{ github.token }}
 ```
 
 ## Cómo funciona
@@ -187,7 +243,7 @@ flowchart LR
 ```bash
 git clone https://github.com/bbenedev/PRotocol && cd PRotocol
 npm install
-npm run check                     # revisión estricta de tipos + 81 pruebas, sin red
+npm run check                     # revisión estricta de tipos + 95 pruebas, sin red
 npm run build                     # compila a dist/ (la CI falla si dist/ quedó desactualizado)
 node dist/cli/main.js --help
 ```
@@ -196,6 +252,7 @@ node dist/cli/main.js --help
 
 - [x] Evaluador: checks, revisiones, dueños del código, frescura, veredicto
 - [x] Comando `protocol`: `check`, `rules`, `list`
+- [x] `--watch`, `list --me` y salida en Markdown
 - [ ] GitHub App: el mismo veredicto como un check en cada pull request, actualizado en cada push
 - [ ] Bot de Discord opcional para quien mantiene el repo
 - [ ] Leer las reglas de dueños del código del repositorio
