@@ -1,0 +1,69 @@
+name: PRotocol
+description: Explain why a pull request can't be merged and who has to act, in the job summary.
+author: bbenedev
+branding:
+  icon: git-pull-request
+  color: blue
+
+inputs:
+  command:
+    description: "'check' for one pull request, or 'list' for every open one."
+    default: check
+  pull-request:
+    description: "Pull request number for 'check'. Defaults to the pull request that triggered the workflow."
+    default: ${{ github.event.pull_request.number }}
+  repo:
+    description: Repository to read, as owner/repo.
+    default: ${{ github.repository }}
+  token:
+    description: Token used to read the repository. Read access is enough.
+    default: ${{ github.token }}
+  fail-if-not-ready:
+    description: "With 'check', fail the step unless the pull request is ready."
+    default: "false"
+
+outputs:
+  verdict:
+    description: "ready, blocked, pending or unknown ('check' only)."
+    value: ${{ steps.prot.outputs.verdict }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - id: prot
+      shell: bash
+      # Inputs reach the script as environment variables, never pasted into it.
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PROT_COMMAND: ${{ inputs.command }}
+        PROT_PULL: ${{ inputs.pull-request }}
+        PROT_REPO: ${{ inputs.repo }}
+        PROT_STRICT: ${{ inputs.fail-if-not-ready }}
+      run: |
+        prot() { node "$GITHUB_ACTION_PATH/dist/cli/main.js" "$@"; }
+        case "$PROT_COMMAND" in
+          list)
+            prot list -r "$PROT_REPO" --markdown >> "$GITHUB_STEP_SUMMARY"
+            ;;
+          check)
+            if [ -z "$PROT_PULL" ]; then
+              echo "::error::No pull request number: set 'pull-request', or run on a pull_request event."
+              exit 64
+            fi
+            set +e
+            prot check -r "$PROT_REPO" "$PROT_PULL" --markdown >> "$GITHUB_STEP_SUMMARY"
+            code=$?
+            set -e
+            verdict=$(case $code in 0) echo ready;; 1) echo blocked;; 2) echo pending;; *) echo unknown;; esac)
+            echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+            echo "PRotocol: #$PROT_PULL is $verdict"
+            if [ "$code" -eq 64 ] || { [ "$PROT_STRICT" = "true" ] && [ "$code" -ne 0 ]; }; then exit "$code"; fi
+            ;;
+          *)
+            echo "::error::'command' must be 'check' or 'list', got '$PROT_COMMAND'."
+            exit 64
+            ;;
+        esac

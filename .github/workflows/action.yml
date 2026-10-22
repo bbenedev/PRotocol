@@ -1,0 +1,30 @@
+name: action
+
+# Runs the action from this repository against the sandbox, so a broken action.yml fails here
+# before anyone uses it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          command: list
+          repo: bbenedev/protocol-sandbox
+      - id: failing
+        uses: ./
+        with:
+          repo: bbenedev/protocol-sandbox
+          pull-request: "2"
+      - name: The failing pull request is reported as blocked
+        env:
+          VERDICT: ${{ steps.failing.outputs.verdict }}
+        run: test "$VERDICT" = blocked
