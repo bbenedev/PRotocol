@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { EXIT, EXIT_USAGE, findToken, run } from "../../src/cli/main.ts";
+import { EXIT, EXIT_USAGE, findToken, mapLimit, run } from "../../src/cli/main.ts";
 import { clean, formatList, plain } from "../../src/cli/render.ts";
 import { startSpinner, type Spinner } from "../../src/cli/spinner.ts";
 import { repoFromRemote, resolvePullTarget, type Git } from "../../src/cli/target.ts";
@@ -292,4 +292,17 @@ test("list --me without a login says how to log in", async () => {
   const { client: _unused, ...offline } = io(c, client("success"));
   assert.equal(await run(["list", "--me"], offline), EXIT.unknown);
   assert.match(c.err.join("\n"), /gh auth login/);
+});
+
+test("list reads pull requests a few at a time and keeps their order", async () => {
+  let running = 0;
+  let peak = 0;
+  const out = await mapLimit([5, 1, 4, 2, 3, 0], 3, async (n) => {
+    peak = Math.max(peak, ++running);
+    await new Promise((r) => setTimeout(r, n));
+    running--;
+    return n * 10;
+  });
+  assert.deepEqual(out, [50, 10, 40, 20, 30, 0]);
+  assert.equal(peak, 3);
 });

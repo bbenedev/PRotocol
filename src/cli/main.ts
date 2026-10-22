@@ -32,6 +32,8 @@ export const EXIT_USAGE = 64;
 
 const DEFAULT_INTERVAL_S = 30;
 const MIN_INTERVAL_S = 5;
+// Pull requests 'list' reads at the same time: faster, and well under GitHub's secondary limits.
+const LIST_CONCURRENCY = 4;
 
 export const HELP = `protocol - explain why a pull request can or cannot be merged, and who has to act
 
@@ -274,11 +276,17 @@ export async function run(argv: string[], io: Io): Promise<number> {
       return 0;
     }
     const me = opt.me ? await viewerLogin(gh) : null;
-    const rows: ListRow[] = [];
     const todo = pulls.slice(0, limit);
-    for (const [i, p] of todo.entries()) {
-      working(`Checking pull requests ${i + 1}/${todo.length}…`);
+    let finished = 0;
+    working(`Checking pull requests 0/${todo.length}…`);
+    const evaluations = await mapLimit(todo, LIST_CONCURRENCY, async (p) => {
       const e = evaluate(await readPullRequest(gh, { ...repo, number: p.number }));
+      working(`Checking pull requests ${++finished}/${todo.length}…`);
+      return e;
+    });
+    const rows: ListRow[] = [];
+    for (const [i, p] of todo.entries()) {
+      const e = evaluations[i] as Evaluation;
       const pull = { author: p.user?.login ?? "", requestedReviewers: (p.requested_reviewers ?? []).map((u) => u.login) };
       if (me && !waitsOn(e, me, pull)) continue;
       rows.push({ number: p.number, title: p.title, verdict: e.verdict, actors: actorsOf(e) });
@@ -297,6 +305,20 @@ export async function run(argv: string[], io: Io): Promise<number> {
     }
     throw err;
   }
+}
+
+/** Runs `fn` over `items`, at most `limit` at a time; results keep the order of `items`. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i] as T);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 /** What --watch compares: a new line is printed only when one of these changes. */
