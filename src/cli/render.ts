@@ -1,3 +1,4 @@
+import { escapeUntrusted, renderCheckRun } from "../evaluator/explain.ts";
 import type { Evaluation, Requirement, RequirementResult, Verdict } from "../evaluator/types.ts";
 
 export type Paint = (code: number, text: string) => string;
@@ -88,4 +89,41 @@ export function actorsOf(e: Evaluation): string {
   const kinds = new Set<string>();
   for (const r of e.results) if (r.status !== "met" && r.actor.kind !== "nobody") kinds.add(r.actor.kind);
   return [...kinds].join(", ") || "—";
+}
+
+/** Whether `login` has something to do on this pull request: their name is on an open item. */
+export function waitsOn(e: Evaluation, login: string, pull: { author: string; requestedReviewers: string[] }): boolean {
+  const me = login.toLowerCase();
+  const is = (name: string) => name.toLowerCase() === me;
+  return e.results.some(
+    (r) =>
+      r.status !== "met" &&
+      (r.actor.who?.some(is) ||
+        (r.actor.kind === "author" && is(pull.author)) ||
+        (r.actor.kind === "reviewer" && pull.requestedReviewers.some(is))),
+  );
+}
+
+// Markdown output reuses the escaping of the check run summary: repository text cannot break
+// the table, fake a link or mention anyone.
+
+const MD_VERDICT: Record<Verdict, string> = { ready: "✅ Ready", blocked: "❌ Blocked", pending: "⏳ Waiting", unknown: "❔ Unknown" };
+
+export function markdownEvaluation(e: Evaluation, ref: { owner: string; repo: string; number: number }): string {
+  const name = escapeUntrusted(`${ref.owner}/${ref.repo}#${ref.number}`);
+  return `### [${name}](https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number})\n\n${renderCheckRun(e).summary}`;
+}
+
+export function markdownList(rows: ListRow[], repo: { owner: string; repo: string }): string {
+  const lines = [
+    `### Open pull requests in ${escapeUntrusted(`${repo.owner}/${repo.repo}`)}`,
+    "",
+    "| Pull request | Verdict | Who acts | Title |",
+    "|---|---|---|---|",
+    ...rows.map(
+      (r) =>
+        `| [#${r.number}](https://github.com/${repo.owner}/${repo.repo}/pull/${r.number}) | ${MD_VERDICT[r.verdict]} | ${escapeUntrusted(r.actors)} | ${escapeUntrusted(r.title)} |`,
+    ),
+  ];
+  return lines.join("\n");
 }

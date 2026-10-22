@@ -1,3 +1,4 @@
+import { escapeUntrusted, renderCheckRun } from "../evaluator/explain.js";
 export const plain = (_code, text) => text;
 export const ansi = (code, text) => `\x1b[${code}m${text}\x1b[0m`;
 // Repository text must not be able to send escape sequences to the terminal.
@@ -74,4 +75,30 @@ export function actorsOf(e) {
         if (r.status !== "met" && r.actor.kind !== "nobody")
             kinds.add(r.actor.kind);
     return [...kinds].join(", ") || "—";
+}
+/** Whether `login` has something to do on this pull request: their name is on an open item. */
+export function waitsOn(e, login, pull) {
+    const me = login.toLowerCase();
+    const is = (name) => name.toLowerCase() === me;
+    return e.results.some((r) => r.status !== "met" &&
+        (r.actor.who?.some(is) ||
+            (r.actor.kind === "author" && is(pull.author)) ||
+            (r.actor.kind === "reviewer" && pull.requestedReviewers.some(is))));
+}
+// Markdown output reuses the escaping of the check run summary: repository text cannot break
+// the table, fake a link or mention anyone.
+const MD_VERDICT = { ready: "✅ Ready", blocked: "❌ Blocked", pending: "⏳ Waiting", unknown: "❔ Unknown" };
+export function markdownEvaluation(e, ref) {
+    const name = escapeUntrusted(`${ref.owner}/${ref.repo}#${ref.number}`);
+    return `### [${name}](https://github.com/${ref.owner}/${ref.repo}/pull/${ref.number})\n\n${renderCheckRun(e).summary}`;
+}
+export function markdownList(rows, repo) {
+    const lines = [
+        `### Open pull requests in ${escapeUntrusted(`${repo.owner}/${repo.repo}`)}`,
+        "",
+        "| Pull request | Verdict | Who acts | Title |",
+        "|---|---|---|---|",
+        ...rows.map((r) => `| [#${r.number}](https://github.com/${repo.owner}/${repo.repo}/pull/${r.number}) | ${MD_VERDICT[r.verdict]} | ${escapeUntrusted(r.actors)} | ${escapeUntrusted(r.title)} |`),
+    ];
+    return lines.join("\n");
 }

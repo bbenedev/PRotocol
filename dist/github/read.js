@@ -132,6 +132,10 @@ export async function openPulls(gh, owner, repo, limit) {
     const per = Math.min(Math.max(limit, 1), 100);
     return gh.get(`/repos/${owner}/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=${per}`);
 }
+/** Login of whoever owns the token. */
+export async function viewerLogin(gh) {
+    return (await gh.get("/user")).login;
+}
 /** The open pull request whose head is `branch` in the same repository, or null. */
 export async function pullForBranch(gh, owner, repo, branch) {
     const head = encodeURIComponent(`${owner}:${branch}`);

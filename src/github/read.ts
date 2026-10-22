@@ -226,11 +226,19 @@ export async function defaultBranch(gh: GitHubClient, owner: string, repo: strin
 export interface OpenPull {
   number: number;
   title: string;
+  user: { login: string } | null;
+  /** Reviewers GitHub is still waiting on; someone who already reviewed is no longer listed. */
+  requested_reviewers?: { login: string }[];
 }
 
 export async function openPulls(gh: GitHubClient, owner: string, repo: string, limit: number): Promise<OpenPull[]> {
   const per = Math.min(Math.max(limit, 1), 100);
   return gh.get<OpenPull[]>(`/repos/${owner}/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=${per}`);
+}
+
+/** Login of whoever owns the token. */
+export async function viewerLogin(gh: GitHubClient): Promise<string> {
+  return (await gh.get<{ login: string }>("/user")).login;
 }
 
 /** The open pull request whose head is `branch` in the same repository, or null. */
